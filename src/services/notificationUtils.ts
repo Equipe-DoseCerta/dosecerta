@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Medicamento } from '../database/database';
 
 /**
- * 🔔 Configura canal de notificação Android
+ * 🔔 Configura canal de notificação Android para MEDICAMENTOS
  */
 export const configurarCanalNotificacao = () => {
   if (Platform.OS === 'android') {
@@ -20,6 +20,26 @@ export const configurarCanalNotificacao = () => {
         vibrate: true,
       },
       (created: boolean) => console.log('✅ Canal de notificação criado:', created)
+    );
+  }
+};
+
+/**
+ * 🆕 Configura canal de notificação Android para NOVIDADES
+ */
+export const configurarCanalNovidades = () => {
+  if (Platform.OS === 'android') {
+    PushNotification.createChannel(
+      {
+        channelId: 'novidades_channel',
+        channelName: 'Novidades do Sistema',
+        channelDescription: 'Avisos, vídeos, áudios e mensagens diretas',
+        playSound: true,
+        soundName: 'default',
+        importance: 4, // HIGH
+        vibrate: true,
+      },
+      (created: boolean) => console.log('✅ Canal de novidades criado:', created)
     );
   }
 };
@@ -100,7 +120,6 @@ export const agendarNotificacoesParaMedicamento = async (med: Medicamento) => {
           playSound: true,
           soundName: Platform.OS === 'android' ? 'toque1.mp3' : 'default',
           vibrate: true,
-          // repeatType removido para evitar conflito de tipos
         });
       }
     }
@@ -119,7 +138,7 @@ export const agendarTodosAlarmes = async (medicamentos: Medicamento[]) => {
 };
 
 /**
- * 📏 Conversor de tipo para unidade
+ * 🔄 Conversor de tipo para unidade
  */
 export const getUnidadePorTipo = (tipo: string): string => {
   const unidadesPorTipo: Record<string, string> = {
@@ -138,16 +157,25 @@ export const getUnidadePorTipo = (tipo: string): string => {
 /**
  * 📌 AsyncStorage para notificações lidas
  */
-export const getLidas = async (tipo: 'diretas' | 'avisos' | 'videos' | 'audios') => {
-  const lidas = await AsyncStorage.getItem(`notificacoesLidas_${tipo}`);
-  return lidas ? JSON.parse(lidas) : [];
+export const getLidas = async (tipo: 'diretas' | 'avisos' | 'videos' | 'audios' | 'saudeDiaria') => {
+  try {
+    const lidas = await AsyncStorage.getItem(`notificacoesLidas_${tipo}`);
+    return lidas ? JSON.parse(lidas) : [];
+  } catch (error) {
+    console.error(`❌ Erro ao buscar lidas (${tipo}):`, error);
+    return [];
+  }
 };
 
 export const marcarComoLida = async (
-  tipo: 'diretas' | 'avisos' | 'videos' | 'audios',
+  tipo: 'diretas' | 'avisos' | 'videos' | 'audios' | 'saudeDiaria',
   ids: number[]
 ) => {
-  await AsyncStorage.setItem(`notificacoesLidas_${tipo}`, JSON.stringify(ids));
+  try {
+    await AsyncStorage.setItem(`notificacoesLidas_${tipo}`, JSON.stringify(ids));
+  } catch (error) {
+    console.error(`❌ Erro ao marcar como lida (${tipo}):`, error);
+  }
 };
 
 /**
@@ -155,6 +183,8 @@ export const marcarComoLida = async (
  */
 export const inicializarNotificacoes = async (medicamentos: Medicamento[]) => {
   configurarCanalNotificacao();
+  configurarCanalNovidades(); // 🆕 Canal de novidades
+  
   if (medicamentos?.length > 0) {
     await agendarTodosAlarmes(medicamentos);
   }
