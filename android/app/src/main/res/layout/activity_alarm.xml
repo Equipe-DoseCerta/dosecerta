@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/alarm_gradient_background"
+    android:fillViewport="true">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp">
+
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="16dp"
+            android:layout_margin="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/card_gradient_background"
+                android:padding="20dp">
+
+                <TextView
+                    android:id="@+id/txtAlarmIcon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⏰"
+                    android:textSize="56sp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:id="@+id/txtTitulo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="⚕️ Hora do Medicamento"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="#1E3A5F"
+                    android:gravity="center"
+                    android:layout_marginBottom="16dp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#E0E0E0"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:id="@+id/txtMedicamento"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💊 Medicamento"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:textColor="#2C3E50"
+                    android:gravity="center"
+                    android:layout_marginBottom="16dp" />
+
+                <LinearLayout
+                    android:id="@+id/detailsContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/details_background"
+                    android:padding="14dp"
+                    android:layout_marginBottom="20dp">
+
+                    <TextView
+                        android:id="@+id/txtPaciente"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="👤 Paciente: Nome do Paciente"
+                        android:textSize="14sp"
+                        android:textColor="#34495E"
+                        android:layout_marginBottom="6dp"
+                        android:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/txtDosagem"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="💧 Dosagem: 1 comprimido"
+                        android:textSize="14sp"
+                        android:textColor="#34495E"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/txtHorario"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="⏰ Horário: 08:00"
+                        android:textSize="15sp"
+                        android:textColor="#E74C3C"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/txtFrequencia"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🔄 Frequência: a cada 8 horas"
+                        android:textSize="13sp"
+                        android:textColor="#7F8C8D"
+                        android:layout_marginBottom="6dp"
+                        android:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/txtDataInicio"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="📅 Início: 01/01/2025"
+                        android:textSize="13sp"
+                        android:textColor="#7F8C8D"
+                        android:layout_marginBottom="6dp"
+                        android:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/txtDuracao"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="📊 Duração: 10 dias"
+                        android:textSize="13sp"
+                        android:textColor="#7F8C8D"
+                        android:layout_marginBottom="6dp"
+                        android:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/txtNotas"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="📝 Observações: Tomar com água após as refeições"
+                        android:textSize="12sp"
+                        android:textColor="#95A5A6"
+                        android:textStyle="italic"
+                        android:layout_marginTop="4dp"
+                        android:visibility="visible" />
+
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnDesligar"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="🔕 DESLIGAR"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFF"
+                    android:background="@drawable/button_desligar"
+                    android:layout_marginBottom="10dp"
+                    android:elevation="4dp" />
+
+                <Button
+                    android:id="@+id/btnLembrar"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="⏰ LEMBRAR EM 5 MIN"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="#1E3A5F"
+                    android:background="@drawable/button_lembrar"
+                    android:elevation="4dp" />
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+    </RelativeLayout>
+
+</ScrollView>

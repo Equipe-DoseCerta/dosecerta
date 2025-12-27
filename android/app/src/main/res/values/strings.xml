@@ -1,3 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DoseCerta</string>
+    
+    <!-- Alarme -->
+    <string name="alarm_service_description">Serviço de alarme crítico para lembretes de medicamentos</string>
+    <string name="alarm_title">Hora do Medicamento</string>
+    <string name="alarm_notification_text">%1$s - %2$s</string>
+    
+    <!-- Mensagens -->
+    <string name="snooze_message">Alarme reagendado para daqui a 5 minutos</string>
+    <string name="alarm_turn_off">DESLIGAR</string>
+    <string name="alarm_snooze">LEMBRAR EM 5 MIN</string>
+    
 </resources>

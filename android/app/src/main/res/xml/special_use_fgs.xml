@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<special-use-fgs-policy xmlns:android="http://schemas.android.com/apk/res/android">
+    <service android:name=".AlarmService">
+        <reason>
+            Serviço de alarme para notificações críticas de medicamentos.
+            Necessário funcionar mesmo com app fechado para garantir que
+            pacientes tomem seus medicamentos nos horários corretos.
+        </reason>
+    </service>
+</special-use-fgs-policy>
