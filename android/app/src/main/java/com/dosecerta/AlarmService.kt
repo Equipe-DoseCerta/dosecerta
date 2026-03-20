@@ -97,9 +97,22 @@ class AlarmService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "🚀 onStartCommand() - flags: $flags, startId: $startId")
 
+        // ========================================
+        // 🚨 CRÍTICO: Iniciar Foreground IMEDIATAMENTE
+        // ========================================
+        try {
+            // 🆕 Notificação SILENCIOSA (sem som/vibração)
+            val dummyNotification = createSilentNotification()
+            startForeground(NOTIFICATION_ID, dummyNotification)
+            Log.d(TAG, "✅ Foreground iniciado com notificação SILENCIOSA")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ ERRO ao iniciar Foreground: ${e.message}", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         if (intent == null) {
             Log.e(TAG, "❌ Intent é NULL! Mantendo serviço vivo...")
-            startForegroundWithDummyNotification()
             return START_STICKY
         }
 
@@ -110,7 +123,6 @@ class AlarmService : Service() {
             handleAlarmStart(intent)
         } else {
             Log.w(TAG, "⚠️ Action desconhecida ou nula")
-            startForegroundWithDummyNotification()
         }
 
         return START_STICKY
@@ -127,54 +139,37 @@ class AlarmService : Service() {
 
             Log.d(TAG, "📋 Dados do alarme: ID=$medicamentoId, Med=$medicamento, Horário=$horario")
 
-            // 🚨 CRÍTICO: Verificar permissão de Full-Screen Intent no Android 14+
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val canUseFullScreenIntent = notificationManager?.canUseFullScreenIntent() ?: false
-                Log.d(TAG, "🔐 Permissão Full-Screen Intent: $canUseFullScreenIntent")
-                
-                if (!canUseFullScreenIntent) {
-                    Log.e(TAG, "❌ SEM PERMISSÃO PARA FULL-SCREEN INTENT!")
-                    Log.e(TAG, "🔧 Solução: Abrir AlarmActivity diretamente")
-                    
-                    // ✅ FALLBACK: Abrir Activity diretamente (funciona mesmo sem permissão)
-                    openAlarmActivityDirectly(intent)
-                    
-                    // Ainda assim criar notificação para manter o serviço
-                    val notification = createFullScreenNotification(intent)
-                    startForeground(NOTIFICATION_ID, notification)
-                    return
-                }
+            // ========================================
+            // 🔥 ESTRATÉGIA: ABRIR ACTIVITY DIRETAMENTE
+            // ========================================
+            Log.d(TAG, "🔥 ABRINDO AlarmActivity DIRETAMENTE (SEM NOTIFICAÇÃO)")
+            
+            if (!openAlarmActivityDirectly(intent)) {
+                Log.e(TAG, "❌ Falha ao abrir Activity diretamente!")
             }
-
-            // ✅ Criar notificação com Full-Screen Intent
-            val notification = createFullScreenNotification(intent)
-            startForeground(NOTIFICATION_ID, notification)
-            
-            // 🔥 ADICIONAL: Abrir Activity diretamente como backup
-            Log.d(TAG, "🔥 Abrindo AlarmActivity diretamente como backup...")
-            openAlarmActivityDirectly(intent)
-            
-            Log.d(TAG, "✅ Foreground Service ATIVO com Full-Screen Notification ID $NOTIFICATION_ID")
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ ERRO ao processar alarme: ${e.message}", e)
-            startForegroundWithDummyNotification()
         }
     }
 
     /**
-     * 🔥 NOVO: Abre AlarmActivity diretamente (funciona mesmo sem permissão)
+     * 🔥 FUNÇÃO PRINCIPAL: Abre AlarmActivity diretamente
      */
-    private fun openAlarmActivityDirectly(serviceIntent: Intent) {
-        try {
+    private fun openAlarmActivityDirectly(serviceIntent: Intent): Boolean {
+        return try {
             Log.d(TAG, "🚀 Abrindo AlarmActivity diretamente...")
             
             val activityIntent = Intent(this, AlarmActivity::class.java).apply {
-                // 🚨 FLAGS CRÍTICOS para abrir do background
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_NO_HISTORY or
-                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY)
+                addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                }
                 
                 // Copiar TODOS os dados
                 putExtra("medicamentoId", serviceIntent.getIntExtra("medicamentoId", -1))
@@ -186,117 +181,67 @@ class AlarmService : Service() {
                 putExtra("dataInicio", serviceIntent.getStringExtra("dataInicio"))
                 putExtra("duracao", serviceIntent.getStringExtra("duracao"))
                 putExtra("notas", serviceIntent.getStringExtra("notas"))
+                // 🔥 CRÍTICO: Passar as configurações de som/vibração da Intent (que foram atualizadas no reagendamento)
                 putExtra("som", serviceIntent.getBooleanExtra("som", true))
                 putExtra("tipoSom", serviceIntent.getStringExtra("tipoSom"))
                 putExtra("vibracao", serviceIntent.getBooleanExtra("vibracao", true))
                 putExtra("notificacaoVisual", serviceIntent.getBooleanExtra("notificacaoVisual", true))
+                
+                putExtra("FROM_SERVICE", true)
             }
             
             startActivity(activityIntent)
-            Log.d(TAG, "✅ AlarmActivity aberta diretamente com sucesso!")
+            Log.d(TAG, "✅ AlarmActivity aberta diretamente (SEM NOTIFICAÇÃO)")
             
+            // 🆕 REMOVE A NOTIFICAÇÃO SILENCIOSA APÓS ABRIR A ACTIVITY
+            try {
+                notificationManager?.cancel(NOTIFICATION_ID)
+                Log.d(TAG, "✅ Notificação foreground removida")
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️ Erro ao remover notificação: ${e.message}")
+            }
+            
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "❌ ERRO ao abrir AlarmActivity diretamente: ${e.message}", e)
+            Log.e(TAG, "❌ ERRO ao abrir AlarmActivity: ${e.message}", e)
             e.printStackTrace()
+            false
         }
     }
 
     /**
-     * 🚨 Cria notificação com Full-Screen Intent
+     * 🔇 Cria notificação SILENCIOSA para manter foreground
+     * (Necessária para Android 8+, mas removida após abrir a activity)
      */
-    private fun createFullScreenNotification(serviceIntent: Intent): Notification {
-        Log.d(TAG, "🔔 Criando Full-Screen Notification...")
-
-        // Extrair TODOS os dados
-        val medicamentoId = serviceIntent.getIntExtra("medicamentoId", -1)
-        val medicamento = serviceIntent.getStringExtra("medicamento") ?: "Medicamento"
-        val paciente = serviceIntent.getStringExtra("paciente") ?: ""
-        val dosagem = serviceIntent.getStringExtra("dosagem") ?: "Dose"
-        val horario = serviceIntent.getStringExtra("horario") ?: "Horário"
-        val frequencia = serviceIntent.getStringExtra("frequencia") ?: ""
-        val dataInicio = serviceIntent.getStringExtra("dataInicio") ?: ""
-        val duracao = serviceIntent.getStringExtra("duracao") ?: ""
-        val notas = serviceIntent.getStringExtra("notas") ?: ""
-        val som = serviceIntent.getBooleanExtra("som", true)
-        val tipoSom = serviceIntent.getStringExtra("tipoSom") ?: "1"
-        val vibracao = serviceIntent.getBooleanExtra("vibracao", true)
-        val notificacaoVisual = serviceIntent.getBooleanExtra("notificacaoVisual", true)
-
-        // ✅ Intent para AlarmActivity
-        val fullScreenIntent = Intent(this, AlarmActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("medicamentoId", medicamentoId)
-            putExtra("medicamento", medicamento)
-            putExtra("paciente", paciente)
-            putExtra("dosagem", dosagem)
-            putExtra("horario", horario)
-            putExtra("frequencia", frequencia)
-            putExtra("dataInicio", dataInicio)
-            putExtra("duracao", duracao)
-            putExtra("notas", notas)
-            putExtra("som", som)
-            putExtra("tipoSom", tipoSom)
-            putExtra("vibracao", vibracao)
-            putExtra("notificacaoVisual", notificacaoVisual)
-        }
-
-        // 🚨 CRÍTICO: PendingIntent com FLAG_IMMUTABLE
-        val fullScreenPendingIntent = PendingIntent.getActivity(
-            this,
-            medicamentoId,
-            fullScreenIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // ✅ Criar notificação
+    private fun createSilentNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("🚨 HORA DO MEDICAMENTO")
-            .setContentText("$medicamento - $horario")
+            .setContentTitle("⏰ Processando alarme...")
+            .setContentText("Abrindo lembrete de medicamento")
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setOngoing(true)
-            .setAutoCancel(false)
-            .setSound(null)
-            .setFullScreenIntent(fullScreenPendingIntent, true) // 🚨 CRUCIAL!
-            .setContentIntent(fullScreenPendingIntent) // 📱 Permite abrir ao tocar
+            .setPriority(NotificationCompat.PRIORITY_LOW) // 🆕 PRIORIDADE BAIXA
+            .setCategory(NotificationCompat.CATEGORY_SERVICE) // 🆕 CATEGORIA: SERVIÇO
+            .setOngoing(false) // 🆕 NÃO É "ONGOING"
+            .setSound(null) // 🆕 SEM SOM
+            .setVibrate(null) // 🆕 SEM VIBRAÇÃO
+            .setAutoCancel(true) // 🆕 AUTO-CANCELÁVEL
             .build()
-            .also {
-                Log.d(TAG, "✅ Full-Screen Notification criada!")
-            }
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "🚨 Alarmes Críticos de Medicamentos",
-                NotificationManager.IMPORTANCE_HIGH
+                "Processamento de Alarmes",
+                NotificationManager.IMPORTANCE_LOW // 🆕 IMPORTÂNCIA BAIXA
             ).apply {
-                description = "Alarmes que devem tocar mesmo com app fechado"
-                setShowBadge(true)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-                setBypassDnd(true)
+                description = "Notificação temporária para processamento"
+                setShowBadge(false) // 🆕 NÃO MOSTRAR BADGE
+                lockscreenVisibility = Notification.VISIBILITY_SECRET // 🆕 NÃO MOSTRAR NA TELA DE BLOQUEIO
+                setSound(null, null) // 🆕 SEM SOM
+                enableVibration(false) // 🆕 SEM VIBRAÇÃO
             }
             notificationManager?.createNotificationChannel(channel)
-            Log.d(TAG, "📢 Canal de notificação criado: $CHANNEL_ID")
-        }
-    }
-
-    private fun startForegroundWithDummyNotification() {
-        try {
-            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("⏰ Alarme Ativo")
-                .setContentText("Aguardando...")
-                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .build()
-                
-            startForeground(NOTIFICATION_ID, notification)
-            Log.d(TAG, "🆘 Foreground iniciado com notificação dummy")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Erro ao iniciar Foreground dummy: ${e.message}", e)
+            Log.d(TAG, "📢 Canal de notificação SILENCIOSO criado")
         }
     }
 

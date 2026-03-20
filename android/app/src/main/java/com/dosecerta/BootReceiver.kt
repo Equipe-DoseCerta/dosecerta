@@ -1,138 +1,147 @@
 package com.dosecerta
 
-import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.PowerManager
 import android.util.Log
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 /**
- * 🔄 BOOT RECEIVER - REAGENDA ALARMES APÓS REINICIAR
- * Funciona mesmo com o app fechado e antes do desbloqueio.
+ * 🔄 BOOT RECEIVER - REAGENDA ALARMES APÓS REINICIALIZAÇÃO
+ * 
+ * Funciona em:
+ * ✅ Reinicialização completa (BOOT_COMPLETED)
+ * ✅ Boot direto criptografado (LOCKED_BOOT_COMPLETED)
+ * ✅ Quick boot (alguns fabricantes)
+ * ✅ Atualização do app (MY_PACKAGE_REPLACED)
  */
 class BootReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "BootReceiver"
-        private const val PREFS_NAME = "alarm_storage"
-        private const val KEY_ALARM_IDS = "scheduled_alarm_ids"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        val action = intent.action
-        Log.d(TAG, "📱 ========== BOOT COMPLETED ==========")
-        Log.d(TAG, "🔄 Action: $action")
+        Log.d(TAG, "📡 ========== BOOT RECEIVER ACIONADO ==========")
+        Log.d(TAG, "🔔 Action recebida: ${intent.action}")
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            Log.d(TAG, "📱 Android 14+ detectado: executando reagendamento com contexto seguro")
-        }
-
-        when (action) {
-            Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_LOCKED_BOOT_COMPLETED,
-            "android.intent.action.QUICKBOOT_POWERON",
+        when (intent.action) {
+            Intent.ACTION_BOOT_COMPLETED -> {
+                Log.d(TAG, "🔄 Sistema reiniciado completamente")
+                handleBootCompleted(context)
+            }
+            
+            Intent.ACTION_LOCKED_BOOT_COMPLETED -> {
+                Log.d(TAG, "🔒 Boot direto criptografado")
+                handleBootCompleted(context)
+            }
+            
+            "android.intent.action.QUICKBOOT_POWERON" -> {
+                Log.d(TAG, "⚡ Quick boot detectado")
+                handleBootCompleted(context)
+            }
+            
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                Log.d(TAG, "🚀 Dispositivo reiniciado - Iniciando reagendamento...")
-
-                val pendingResult = goAsync()
-                val wakeLock = acquireBootWakeLock(context)
-
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        rescheduleAllAlarms(context)
-                        Log.d(TAG, "✅ Reagendamento concluído com sucesso!")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "❌ Erro no reagendamento: ${e.message}", e)
-                    } finally {
-                        wakeLock?.let { if (it.isHeld) it.release() }
-                        pendingResult.finish()
-                    }
-                }
+                Log.d(TAG, "📦 Aplicativo atualizado")
+                handleBootCompleted(context)
             }
+            
             else -> {
-                Log.w(TAG, "⚠️ Action desconhecida: $action")
+                Log.w(TAG, "⚠️ Action desconhecida: ${intent.action}")
             }
         }
     }
 
     /**
-     * 🔋 WakeLock curto para manter CPU ativa durante o boot
+     * 🔄 Processa o boot completo
      */
-    private fun acquireBootWakeLock(context: Context): PowerManager.WakeLock? {
-        return try {
-            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            val wl = pm.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "DoseCerta::BootReceiverWakeLock"
-            )
-            wl.acquire(2 * 60 * 1000L) // 2 minutos
-            Log.d(TAG, "🔋 Wake Lock de boot adquirido (2 min)")
-            wl
+    private fun handleBootCompleted(context: Context) {
+        try {
+            Log.d(TAG, "🎬 Iniciando reagendamento de alarmes...")
+
+            // ========================================
+            // 1️⃣ REAGENDAR ALARMES DE MEDICAMENTOS
+            // ========================================
+            val rnIntent = Intent("REAGENDAR_ALARMES")
+            context.sendBroadcast(rnIntent)
+            Log.d(TAG, "✅ Broadcast REAGENDAR_ALARMES enviado para React Native")
+
+            // ========================================
+            // 2️⃣ 🆕 REAGENDAR CHECAGEM DE NOVIDADES
+            // ========================================
+            reagendarNovidadesCheck(context)
+
+            Log.d(TAG, "🎉 ========== REAGENDAMENTO CONCLUÍDO ==========")
+            
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Erro ao adquirir Wake Lock: ${e.message}", e)
-            null
+            Log.e(TAG, "❌ Erro no reagendamento: ${e.message}", e)
+            e.printStackTrace()
         }
     }
 
     /**
-     * 🔄 Reagenda todos os alarmes salvos
+     * 🆕 Reagenda a checagem de novidades se estava ativa
      */
-    private fun rescheduleAllAlarms(context: Context) {
-        Log.d(TAG, "📋 Iniciando leitura de alarmes salvos...")
-
+    private fun reagendarNovidadesCheck(context: Context) {
         try {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val savedAlarmIds = prefs.getStringSet(KEY_ALARM_IDS, null)
-
-            if (savedAlarmIds != null && savedAlarmIds.isNotEmpty()) {
-                Log.d(TAG, "📦 Encontrados ${savedAlarmIds.size} alarmes para reagendar")
-                startMainActivityIfUnlocked(context)
+            Log.d(TAG, "🔍 Verificando se havia checagem de novidades ativa...")
+            
+            // Lê as preferências salvas
+            val prefs = context.getSharedPreferences("novidades_check_prefs", Context.MODE_PRIVATE)
+            val intervalo = prefs.getInt("intervalo_horas", 0)
+            
+            if (intervalo > 0) {
+                Log.d(TAG, "✅ Checagem ativa encontrada: $intervalo horas")
+                Log.d(TAG, "🔄 Reagendando checagem de novidades...")
+                
+                // Cria o Intent com a action correta
+                val intent = Intent(context, AlarmReceiver::class.java).apply {
+                    action = "com.dosecerta.CHECK_NOVIDADES"
+                }
+                
+                val pendingIntent = android.app.PendingIntent.getBroadcast(
+                    context,
+                    200000, // Mesmo ID usado no AlarmModule
+                    intent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or 
+                    android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                val intervaloMs = intervalo * 3600 * 1000L
+                val primeiraChecagem = System.currentTimeMillis() + (60 * 1000L) // 1 minuto
+                
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    alarmManager.setInexactRepeating(
+                        android.app.AlarmManager.RTC_WAKEUP,
+                        primeiraChecagem,
+                        intervaloMs,
+                        pendingIntent
+                    )
+                    Log.d(TAG, "✅ Checagem reagendada (INEXACT REPEATING)")
+                } else {
+                    alarmManager.setRepeating(
+                        android.app.AlarmManager.RTC_WAKEUP,
+                        primeiraChecagem,
+                        intervaloMs,
+                        pendingIntent
+                    )
+                    Log.d(TAG, "✅ Checagem reagendada (REPEATING)")
+                }
+                
+                // Atualiza o timestamp do último agendamento
+                prefs.edit()
+                    .putLong("ultimo_agendamento", System.currentTimeMillis())
+                    .apply()
+                
+                Log.d(TAG, "🎉 Checagem de novidades reagendada com sucesso!")
+                
             } else {
-                Log.w(TAG, "⚠️ Nenhum alarme salvo encontrado - iniciando fallback...")
-                startMainActivityIfUnlocked(context)
+                Log.d(TAG, "ℹ️ Nenhuma checagem de novidades estava ativa")
             }
-
+            
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Erro ao reagendar: ${e.message}", e)
-            startMainActivityIfUnlocked(context)
+            Log.e(TAG, "❌ Erro ao reagendar checagem de novidades: ${e.message}", e)
+            e.printStackTrace()
         }
-    }
-
-    /**
-     * 📱 Inicia MainActivity para reagendar via React Native
-     */
-    private fun startMainActivityIfUnlocked(context: Context) {
-        if (!isUserUnlocked(context)) {
-            Log.w(TAG, "🔒 Usuário ainda não desbloqueou o dispositivo — reagendamento adiado.")
-            return
-        }
-
-        try {
-            val launchIntent = Intent(context, MainActivity::class.java).apply {
-                action = "REAGENDAR_ALARMES"
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra("source", "boot_receiver")
-                putExtra("timestamp", System.currentTimeMillis())
-            }
-
-            context.startActivity(launchIntent)
-            Log.d(TAG, "✅ MainActivity iniciada para reagendamento")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Erro ao iniciar MainActivity: ${e.message}", e)
-        }
-    }
-
-    /**
-     * 🔐 Verifica se o usuário já desbloqueou o dispositivo
-     */
-    private fun isUserUnlocked(context: Context): Boolean {
-        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-        return km.isKeyguardLocked.not()
     }
 }

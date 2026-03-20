@@ -1,124 +1,127 @@
-import React, { useState, useEffect } from 'react'; 
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
-  TouchableOpacity, 
-  Share, 
-  Alert, 
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Share,
   ActivityIndicator,
-  DeviceEventEmitter, // Importar para escutar eventos do DB
-  StatusBar, // ADICIONAR: Importação da Status Bar
+  DeviceEventEmitter,
+  Image,
 } from 'react-native';
-// useIsFocused é importante para recarregar a lista quando o usuário volta para a tela
 import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { Medicamento, fetchMedicamentos, deleteMedicamento } from '../database/database';
+import NativeAlarmService from '../services/NativeAlarmService';
+import { cancelarAlarmesMedicamento } from '../services/alarmeService';
+import { useModal } from '../components/ModalContext';
+import ScreenContainer from '../components/ScreenContainer';
+import { theme } from '../constants/theme';
 
-// ADICIONAR: Importações de Layout
-import LinearGradient from 'react-native-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// --- Funções de formatação (preservadas) ---
 
-// **IMPORTAÇÃO DO BANCO DE DADOS REAL**
-import { Medicamento, fetchMedicamentos, deleteMedicamento } from '../database/database'; 
-
-// Funções de formatação (permanecem as mesmas, usam Medicamento importado)
 const formatarDosagem = (tipo: string, dosagem: string, unidade?: string) => {
   const tipoLower = tipo?.toLowerCase() || '';
-  
-  if (tipoLower === 'líquido') {
-    return `${dosagem} ml`;
-  }
-  if (tipoLower === 'gotas') {
-    return dosagem === '1' ? '1 gota' : `${dosagem} gotas`;
-  }
-  // Ajustar unidade, se vier sem 'mg' ou 'g' e for um número.
+  if (tipoLower === 'líquido') return `${dosagem} ml`;
+  if (tipoLower === 'gotas') return dosagem === '1' ? '1 gota' : `${dosagem} gotas`;
   return `${dosagem} ${unidade || ''}`;
 };
 
 const formatarHorario = (hora: string) => {
   try {
-    if (!hora || !hora.includes(':')) {
-      return 'Horário inválido';
-    }
+    if (!hora || !hora.includes(':')) return 'Horário inválido';
     return hora;
   } catch {
-    console.error('Erro ao formatar horário:');
     return 'Horário inválido';
   }
 };
 
+// ============================================================================
+
 const HistoricoScreen = () => {
   const navigation = useNavigation();
-  const isFocused = useIsFocused(); // Hook para saber se a tela está em foco
+  const isFocused  = useIsFocused();
+  const { showModal } = useModal();
   const [medicamentos, setMedicamentos] = useState<Medicamento[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Função para buscar dados no banco
-  const carregarMedicamentos = async () => {
+  // --- Carregamento (preservado) ---
+  const carregarMedicamentos = useCallback(async () => {
     setLoading(true);
     try {
-      // **CHAMADA À FUNÇÃO REAL DE BUSCA DO DB**
-      const listaMedicamentos = await fetchMedicamentos();
-      setMedicamentos(listaMedicamentos);
+      const todos = await fetchMedicamentos();
+      const hoje = new Date();
+      const limite30dias = new Date();
+      limite30dias.setDate(hoje.getDate() - 30);
+
+      setMedicamentos(todos.filter(m => {
+        // Apenas medicamentos com alarme (não os de apenas registro)
+        if (m.tipo_cadastro === 'registro') return false;
+        // Apenas inativos (tratamentos finalizados)
+        if (m.ativo) return false;
+        // Apenas dos últimos 30 dias
+        if (m.dataInicio) {
+          const partes = m.dataInicio.split('/');
+          if (partes.length === 3) {
+            const dataInicio = new Date(
+              parseInt(partes[2], 10), parseInt(partes[1], 10) - 1, parseInt(partes[0], 10)
+            );
+            return dataInicio >= limite30dias;
+          }
+        }
+        return true;
+      }));
     } catch {
-      console.error('Erro ao carregar medicamentos:');
-      Alert.alert('Erro', 'Não foi possível carregar o histórico de medicamentos.');
+      showModal({
+        type: 'error',
+        message: 'Não foi possível carregar o histórico de medicamentos.',
+      });
       setMedicamentos([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [showModal]);
 
+  // --- Excluir (preservado) ---
   const handleExcluir = (id: number) => {
-    Alert.alert(
-      'Confirmar Exclusão',
-      'Tem certeza de que deseja excluir este medicamento do histórico? Esta ação não pode ser desfeita.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          onPress: async () => {
-            try {
-              // **CHAMADA À FUNÇÃO REAL DE EXCLUSÃO DO DB**
-              await deleteMedicamento(id);
-              // Como a exclusão emite um evento, o useEffect irá recarregar, mas podemos otimizar:
-              setMedicamentos(prev => prev.filter(med => med.id !== id));
-              Alert.alert('Sucesso', 'Medicamento excluído com sucesso.');
-            } catch {
-              console.error('Erro ao excluir medicamento:');
-              Alert.alert('Erro', 'Não foi possível excluir o medicamento.');
-            }
-          },
-          style: 'destructive',
-        },
-      ],
-      { cancelable: true }
-    );
+    showModal({
+      type: 'confirmation',
+      title: 'Confirmar Exclusão',
+      message: 'Tem certeza de que deseja excluir este medicamento? Esta ação não pode ser desfeita.',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      onConfirm: async () => {
+        try {
+          await NativeAlarmService.cancelAllAlarms(id);
+          await cancelarAlarmesMedicamento(id);
+          await deleteMedicamento(id);
+          setMedicamentos(prev => prev.filter(med => med.id !== id));
+          showModal({ type: 'success', message: 'Medicamento excluído com sucesso.' });
+        } catch {
+          showModal({ type: 'error', message: 'Não foi possível excluir o medicamento.' });
+        }
+      },
+    });
   };
-  
-  // Efeito para carregar dados e configurar ouvintes de eventos
-  useEffect(() => {
-    // Recarregar sempre que a tela estiver em foco (útil ao voltar da tela de cadastro/edição)
-    if (isFocused) {
-      carregarMedicamentos();
-    }
-    
-    // Ouvintes de eventos para recarregar a lista quando o DB for alterado em outro componente
-    const listenerAdd = DeviceEventEmitter.addListener('medicamento-adicionado', carregarMedicamentos);
-    const listenerDelete = DeviceEventEmitter.addListener('medicamento-excluido', carregarMedicamentos); 
-    const listenerDoseTomada = DeviceEventEmitter.addListener('dose-tomada', carregarMedicamentos); 
 
+  // --- Listeners (preservados) ---
+  useEffect(() => {
+    if (isFocused) carregarMedicamentos();
+    const listenerAdd       = DeviceEventEmitter.addListener('medicamento-adicionado', carregarMedicamentos);
+    const listenerDelete    = DeviceEventEmitter.addListener('medicamento-excluido', carregarMedicamentos);
+    const listenerDoseTomada = DeviceEventEmitter.addListener('dose-tomada', carregarMedicamentos);
     return () => {
-      // Limpar os ouvintes ao desmontar
       listenerAdd.remove();
       listenerDelete.remove();
       listenerDoseTomada.remove();
     };
-  }, [isFocused]);
+  }, [isFocused, carregarMedicamentos]);
 
+  // --- Compartilhar (preservado) ---
   const handleCompartilhar = async (medicamento: Medicamento) => {
     try {
-      const mensagem = `Relatório de Medicamento:\n\n`
+      const mensagem =
+        `Relatório de Medicamento:\n\n`
         + `Paciente: ${medicamento.nomePaciente}\n`
         + `Medicamento: ${medicamento.nome}\n`
         + `Dosagem: ${formatarDosagem(medicamento.tipo, medicamento.dosagem, medicamento.unidade)}\n`
@@ -126,299 +129,371 @@ const HistoricoScreen = () => {
         + `Intervalo: ${medicamento.intervalo_horas} horas\n`
         + `Duração: ${medicamento.duracaoTratamento} dias\n`
         + `Notas: ${medicamento.notas || 'Nenhuma'}`;
-      
       await Share.share({ message: mensagem, title: 'Relatório de Medicamento' });
     } catch {
-      Alert.alert('Erro', 'Não foi possível compartilhar o relatório.');
+      showModal({ type: 'error', message: 'Não foi possível compartilhar o relatório.' });
     }
   };
 
+  // --- Render de cada card ---
   const renderItem = ({ item }: { item: Medicamento }) => (
     <View style={styles.card}>
+
+      {/* Cabeçalho: nome + badge */}
       <View style={styles.cardHeader}>
         <View style={styles.headerContent}>
+          {/* ✅ 18 → 19px */}
           <Text style={styles.medName}>{item.nome}</Text>
-          <Text style={styles.patientName}>{item.nomePaciente}</Text>
-          <View style={[styles.statusBadge, item.ativo ? styles.statusActive : styles.statusInactive]}>
-            <Text style={styles.statusText}>{item.ativo ? 'Ativo' : 'Finalizado'}</Text>
-          </View>
+          {/* ✅ 14 → 16px */}
+          <Text style={styles.patientName}>👤 {item.nomePaciente}</Text>
         </View>
-        <View style={styles.actionButtons}>
-          <TouchableOpacity onPress={() => handleCompartilhar(item)} style={styles.shareButton}>
-            <Text style={styles.shareIcon}>📤</Text>
-          </TouchableOpacity>
-          {/* O ID é opcional na interface, mas obrigatório para exclusão */}
-          {item.id && ( 
-            <TouchableOpacity onPress={() => handleExcluir(item.id!)} style={styles.deleteButton}>
-              <Text style={styles.deleteIcon}>🗑️</Text>
-            </TouchableOpacity>
-          )}
+        <View style={[styles.statusBadge, item.ativo ? styles.statusActive : styles.statusInactive]}>
+          {/* ✅ 12 → 14px */}
+          <Text style={styles.statusText}>{item.ativo ? 'Ativo' : 'Finalizado'}</Text>
         </View>
       </View>
+
+      {/* Foto da embalagem */}
+      {item.foto_path && (
+        <View style={styles.fotoContainer}>
+          <Image
+            source={{ uri: `file://${item.foto_path}` }}
+            style={styles.fotoEmbalagem}
+            resizeMode="contain"
+          />
+        </View>
+      )}
+
+      {/* Corpo: detalhes */}
       <View style={styles.cardBody}>
         <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Dosagem:</Text>
+          {/* ✅ 14 → 16px em todos os label/value */}
+          <Text style={styles.detailLabel}>Dosagem</Text>
           <Text style={styles.detailValue}>{formatarDosagem(item.tipo, item.dosagem, item.unidade)}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Início:</Text>
+          <Text style={styles.detailLabel}>Início</Text>
           <Text style={styles.detailValue}>{item.dataInicio} às {item.horario_inicial}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Intervalo:</Text>
+          <Text style={styles.detailLabel}>Intervalo</Text>
           <Text style={styles.detailValue}>A cada {item.intervalo_horas}h</Text>
         </View>
         <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Duração:</Text>
+          <Text style={styles.detailLabel}>Duração</Text>
           <Text style={styles.detailValue}>{item.duracaoTratamento} dia(s)</Text>
         </View>
         <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Total de doses:</Text>
+          <Text style={styles.detailLabel}>Total de doses</Text>
           <Text style={styles.detailValue}>{item.dosesTotais}</Text>
         </View>
-        {item.notas && (
+
+        {item.notas ? (
           <View style={styles.notesContainer}>
-            <Text style={styles.notesLabel}>Observações:</Text>
+            <Text style={styles.notesLabel}>Observações</Text>
+            {/* ✅ 14px itálico → 15px sem itálico */}
             <Text style={styles.notesText}>{item.notas}</Text>
           </View>
+        ) : null}
+      </View>
+
+      {/* Rodapé: ações — ✅ botões maiores e com label */}
+      <View style={styles.actionButtons}>
+        <TouchableOpacity
+          onPress={() => handleCompartilhar(item)}
+          style={styles.shareButton}
+          accessibilityRole="button"
+          accessibilityLabel={`Compartilhar relatório de ${item.nome}`}
+        >
+          <Text style={styles.actionIcon}>📤</Text>
+          <Text style={styles.actionText}>Compartilhar</Text>
+        </TouchableOpacity>
+
+        {item.id && (
+          <TouchableOpacity
+            onPress={() => handleExcluir(item.id!)}
+            style={styles.deleteButton}
+            accessibilityRole="button"
+            accessibilityLabel={`Excluir ${item.nome}`}
+          >
+            <Text style={styles.actionIcon}>🗑️</Text>
+            <Text style={styles.actionTextDelete}>Excluir</Text>
+          </TouchableOpacity>
         )}
       </View>
+
     </View>
   );
 
+  // --- Render principal ---
   return (
-    <View style={styles.container}>
-      {/* ADICIONAR: Status Bar com cor do topo do gradiente */}
-      <StatusBar backgroundColor="#054F77" barStyle="light-content" />
-      
-      {/* ADICIONAR: LinearGradient para o fundo */}
-      <LinearGradient colors={['#054F77', '#0A7AB8']} style={styles.gradientContainer}>
-        
-        {/* ADICIONAR: SafeAreaView para proteger áreas não seguras, exceto o topo */}
-        <SafeAreaView style={styles.safeAreaContent} edges={['left', 'right', 'bottom']}>
-          {loading ? (
-            <View style={styles.centered}>
-              {/* Ajustar cor do ActivityIndicator para branco */}
-              <ActivityIndicator size="large" color="white" /> 
-              {/* Cor de loadingText ajustada no StyleSheet */}
-              <Text style={styles.loadingText}>Carregando histórico...</Text>
+    <ScreenContainer showGradient={true}>
+      {loading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="white" />
+          {/* ✅ 16 → 17px */}
+          <Text style={styles.loadingText}>Carregando histórico...</Text>
+        </View>
+
+      ) : medicamentos.length === 0 ? (
+        <View style={styles.centered}>
+          <Text style={styles.emptyIcon}>📋</Text>
+          {/* ✅ mantido 20px — já estava ok */}
+          <Text style={styles.emptyText}>Nenhum tratamento nos últimos 30 dias</Text>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => navigation.navigate('CadastroMedicamento' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Adicionar medicamento"
+          >
+            {/* ✅ 16 → 17px */}
+            <Text style={styles.addButtonText}>+ Adicionar Medicamento</Text>
+          </TouchableOpacity>
+        </View>
+
+      ) : (
+        <FlatList
+          data={medicamentos}
+          renderItem={renderItem}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <View style={styles.headerContainer}>
+              {/* ✅ mantido 18px — ok para subtítulo de tela */}
+              <Text style={styles.screenSubtitle}>Acompanhe seus tratamentos</Text>
             </View>
-          ) : medicamentos.length === 0 ? (
-            <View style={styles.centered}>
-              <Text style={styles.emptyIcon}>📋</Text>
-              {/* Cores de emptyText e emptySubtitle ajustadas no StyleSheet */}
-              <Text style={styles.emptyText}>Nenhum medicamento registrado</Text>
-              <Text style={styles.emptySubtitle}>Cadastre um medicamento para começar</Text>
-              <TouchableOpacity 
-                style={styles.addButton} 
-                onPress={() => navigation.navigate('CadastroMedicamento' as never)}
-              >
-                <Text style={styles.addButtonText}>Adicionar Medicamento</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <FlatList
-              data={medicamentos}
-              renderItem={renderItem}
-              keyExtractor={(item) => String(item.id)}
-              contentContainerStyle={styles.listContainer} // contentContainerStyle contém o ajuste de paddingTop
-              showsVerticalScrollIndicator={false}
-              ListHeaderComponent={
-                // Cor de screenSubtitle ajustada no StyleSheet
-                <Text style={styles.screenSubtitle}>Acompanhe seus tratamentos</Text>
-              }
-            />
-          )}
-        </SafeAreaView>
-      </LinearGradient>
-    </View>
+          }
+        />
+      )}
+    </ScreenContainer>
   );
 };
 
+// ============================================================================
+// ESTILOS
+// ============================================================================
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    // REMOVIDO: backgroundColor: '#f5f5f5',
-    // REMOVIDO: paddingTop: 10,
-  },
-  // ADICIONADO: Estilos para o Gradiente
-  gradientContainer: {
-    flex: 1,
-  },
-  safeAreaContent: {
-    flex: 1,
-  },
-  
-  // ALTERADO: Cor para contraste com o fundo escuro
-  screenSubtitle: {
-    fontSize: 18,
-    color: 'white', 
-    textAlign: 'center',
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
   centered: {
-    flex: 1, // Para preencher a área segura no Loading/Empty
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  // ALTERADO: Cor para contraste com o fundo escuro
+  // ✅ 16 → 17px
   loadingText: {
     marginTop: 15,
-    fontSize: 16,
+    fontSize: 17,
     color: 'white',
+    fontWeight: '500',
   },
-  emptyIcon: {
-    fontSize: 60,
-    marginBottom: 20,
-  },
-  // ALTERADO: Cor para contraste com o fundo escuro
+  emptyIcon: { fontSize: 60, marginBottom: 20 },
+  // ✅ mantido 20px
   emptyText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white', 
+    color: 'white',
     textAlign: 'center',
-    marginBottom: 10,
-  },
-  // ALTERADO: Cor para contraste com o fundo escuro
-  emptySubtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.7)', 
-    textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 32,
+    lineHeight: 30,
   },
   addButton: {
-    backgroundColor: '#054f77',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 16,      // ✅ era 15 — minHeight ~52px
     borderRadius: 25,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
+    minHeight: 52,
+    justifyContent: 'center',
   },
+  // ✅ 16 → 17px
   addButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold',
   },
-  // AJUSTADO: paddingTop para compensar a Status Bar
+
+  headerContainer: {
+    paddingTop: 10,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    alignItems: 'center',
+  },
+  // ✅ mantido 18px
+  screenSubtitle: {
+    fontSize: 18,
+    color: 'white',
+    textAlign: 'center',
+    fontWeight: '600',
+    lineHeight: 26,
+  },
+
   listContainer: {
-    paddingHorizontal: 15,
-    paddingTop: 30, 
+    paddingHorizontal: 8,
+    paddingTop: 10,
     paddingBottom: 50,
   },
+
   card: {
     backgroundColor: '#FFF',
-    borderRadius: 15,
-    marginBottom: 15,
+    borderRadius: 16,
+    marginBottom: 16,
     overflow: 'hidden',
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 4,
   },
+
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: 15,
+    padding: 16,
     backgroundColor: 'rgba(5, 79, 119, 0.05)',
   },
-  headerContent: {
-    flex: 1,
-  },
+  headerContent: { flex: 1, marginRight: 8 },
+  // ✅ 18 → 19px
   medName: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: 'bold',
-    color: '#054f77',
-    marginBottom: 2,
+    color: '#054F77',
+    marginBottom: 4,
+    lineHeight: 26,
   },
+  // ✅ 14 → 16px
   patientName: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
+    fontSize: 16,
+    color: '#475569',
+    lineHeight: 22,
   },
+
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
     alignSelf: 'flex-start',
+    minHeight: 30,
+    justifyContent: 'center',
   },
-  statusActive: {
-    backgroundColor: '#4CAF50',
-  },
-  statusInactive: {
-    backgroundColor: '#FF9800',
-  },
+  statusActive:   { backgroundColor: '#1E7E34' },   // ✅ verde mais escuro — melhor contraste
+  statusInactive: { backgroundColor: '#B45309' },   // ✅ âmbar escuro — melhor contraste
+  // ✅ 12 → 14px
   statusText: {
     color: 'white',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
   },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 10,
+
+  cardBody: { padding: 16 },
+
+  fotoContainer: {
+    backgroundColor: '#F8F9FA',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#E8E8E8',
   },
-  shareButton: {
-    padding: 8,
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-    borderRadius: 20,
+  fotoEmbalagem: {
+    width: '100%',
+    height: 220,
+    backgroundColor: '#F0F0F0',
   },
-  shareIcon: {
-    fontSize: 18,
-  },
-  deleteButton: {
-    padding: 8,
-    backgroundColor: 'rgba(244, 67, 54, 0.1)',
-    borderRadius: 20,
-  },
-  deleteIcon: {
-    fontSize: 18,
-  },
-  cardBody: {
-    padding: 15,
-  },
+
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-    paddingVertical: 2,
+    paddingVertical: 6,       // ✅ era 2 — mais respiro entre linhas
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
+  // ✅ 14 → 16px
   detailLabel: {
-    fontSize: 14,
-    color: '#777',
+    fontSize: 16,
+    color: '#64748B',
     fontWeight: '500',
+    flex: 1,
+    lineHeight: 22,
   },
+  // ✅ 14 → 16px
   detailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
     textAlign: 'right',
     flex: 1,
     marginLeft: 10,
+    lineHeight: 22,
   },
+
   notesContainer: {
-    marginTop: 15,
-    paddingTop: 15,
+    marginTop: 14,
+    paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#E2E8F0',
   },
+  // ✅ 14 → 16px
   notesLabel: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#555',
-    marginBottom: 5,
+    color: '#475569',
+    marginBottom: 6,
   },
+  // ✅ 14px itálico → 15px sem itálico
   notesText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    fontStyle: 'italic',
+    fontSize: 15,
+    color: '#64748B',
+    lineHeight: 22,
+  },
+
+  // ✅ Botões de ação: ícone + texto, área de toque generosa
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,      // ✅ era 8 — minHeight ~44px
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(30, 126, 52, 0.1)',
+    borderRadius: 20,
+    minHeight: 44,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,      // ✅ era 8
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(192, 57, 43, 0.1)',
+    borderRadius: 20,
+    minHeight: 44,
+  },
+  // ✅ era 18px — agora 20px
+  actionIcon: { fontSize: 20 },
+  // ✅ NOVO: texto visível nos botões de ação
+  actionText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E7E34',
+  },
+  actionTextDelete: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#C0392B',
   },
 });
 

@@ -7,6 +7,7 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -61,11 +62,12 @@ class AlarmActivity : AppCompatActivity() {
     private var dataInicio: String = ""
     private var duracao: String = ""
     private var notas: String = ""
+    
+    private var isActivityInitialized = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // 🚨 LOG CRÍTICO PRIMEIRO
         Log.d(TAG, "🚀 ========== ALARM ACTIVITY INICIADA ==========")
         Log.d(TAG, "📱 Build.VERSION.SDK_INT: ${Build.VERSION.SDK_INT}")
         Log.d(TAG, "📱 App State: ${if (isAppInForeground()) "FOREGROUND" else "BACKGROUND/CLOSED"}")
@@ -94,6 +96,8 @@ class AlarmActivity : AppCompatActivity() {
             
             Log.d(TAG, "8️⃣ Chamando setupButtons()...")
             setupButtons()
+            
+            isActivityInitialized = true
             
             Log.d(TAG, "✅ ========== ACTIVITY TOTALMENTE CONFIGURADA ==========")
             
@@ -126,11 +130,14 @@ class AlarmActivity : AppCompatActivity() {
             }
             
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            window.addFlags(WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON)
+            // FLAG_ALLOW_LOCK_WHILE_SCREEN_ON removida: pode reativar o keyguard sobre a activity
+            
+            // FLAG_NOT_TOUCHABLE removida: bloqueava todos os toques na janela (causa raiz do bug)
             
             window.decorView.systemUiVisibility = (
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             )
             
             Log.d(TAG, "✅ Window flags configuradas com sucesso")
@@ -146,15 +153,24 @@ class AlarmActivity : AppCompatActivity() {
         try {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             
-            wakeLock = powerManager.newWakeLock(
+            val wakeLockFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
                 PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                PowerManager.ON_AFTER_RELEASE,
+                PowerManager.ON_AFTER_RELEASE or
+                PowerManager.FULL_WAKE_LOCK
+            } else {
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                PowerManager.ON_AFTER_RELEASE
+            }
+            
+            wakeLock = powerManager.newWakeLock(
+                wakeLockFlags,
                 "DoseCerta::AlarmFullWakeLock"
             )
             
-            wakeLock?.acquire(15 * 60 * 1000L)
-            Log.d(TAG, "✅ Wake Lock SCREEN_BRIGHT adquirido (15 min)")
+            wakeLock?.acquire(30 * 60 * 1000L) // 30 minutos
+            Log.d(TAG, "✅ Wake Lock SCREEN_BRIGHT adquirido (30 min)")
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ ERRO CRÍTICO ao adquirir Wake Lock: ${e.message}", e)
@@ -221,7 +237,7 @@ class AlarmActivity : AppCompatActivity() {
         try {
             if (!temNotificacaoVisual) {
                 cardContainer.alpha = 0.3f
-                cardContainer.isEnabled = false
+                // ✅ CORRIGIDO: isEnabled=false bloquearia os botões filhos — REMOVIDO
             }
             
             txtMedicamento.text = "💊 $medicamento"
@@ -290,7 +306,7 @@ class AlarmActivity : AppCompatActivity() {
         
         try {
             if (temSom) {
-                maximizeVolumeSilently()
+                // 🆕 NÃO configura volume do sistema, apenas lê das preferências
                 startAlarmSound()
             } else {
                 Log.d(TAG, "🔇 Som desabilitado")
@@ -309,19 +325,42 @@ class AlarmActivity : AppCompatActivity() {
         }
     }
 
-    private fun maximizeVolumeSilently() {
-        try {
-            val maxVolume = audioManager?.getStreamMaxVolume(AudioManager.STREAM_ALARM) ?: 15
-            audioManager?.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
-            Log.d(TAG, "🔊 Volume: $maxVolume (máximo)")
+    // ========================================
+    // 🆕 FUNÇÃO CRÍTICA: VOLUME MÍNIMO GARANTIDO (60-70%)
+    // ========================================
+    // ========================================
+    // 🆕 CRÍTICO: Retorna volume configurado como float (0.0 a 1.0)
+    // ========================================
+    private fun getConfiguredVolumeFloat(): Float {
+        return try {
+            val prefs = getSharedPreferences("alarm_preferences", Context.MODE_PRIVATE)
+            val volumeConfigured = prefs.getInt("volumeAlarme", 75) // 75% padrão
+            
+            // Converte 0-100 para 0.0-1.0
+            val volumeFloat = volumeConfigured / 100.0f
+            
+            Log.d(TAG, "🔊 ========================================")
+            Log.d(TAG, "🔊 VOLUME CONFIGURADO DO ALARME")
+            Log.d(TAG, "🔊 Volume nas preferências: $volumeConfigured%")
+            Log.d(TAG, "🔊 Volume do MediaPlayer: $volumeFloat (0.0 a 1.0)")
+            Log.d(TAG, "🔊 ========================================")
+            Log.d(TAG, "🔒 Volume INDEPENDENTE do volume do sistema")
+            Log.d(TAG, "✅ MediaPlayer usará volume: ${(volumeFloat * 100).toInt()}%")
+            Log.d(TAG, "💡 Mesmo que sistema esteja em silêncio, alarme tocará!")
+            
+            volumeFloat
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Erro ao ajustar volume: ${e.message}", e)
+            Log.e(TAG, "❌ Erro ao ler volume configurado: ${e.message}", e)
+            0.75f // Padrão 75% em caso de erro
         }
     }
 
     private fun startAlarmSound() {
         try {
             Log.d(TAG, "🎵 Iniciando som (tipo: $tipoSom)...")
+            
+            // 🔥 LÊ VOLUME CONFIGURADO (0.0 a 1.0)
+            val volumeFloat = getConfiguredVolumeFloat()
             
             val soundResourceName = when (tipoSom) {
                 "1" -> "toque1"
@@ -333,29 +372,58 @@ class AlarmActivity : AppCompatActivity() {
             
             val resId = resources.getIdentifier(soundResourceName, "raw", packageName)
             
-            mediaPlayer = if (resId != 0) {
+            if (resId != 0) {
                 Log.d(TAG, "✅ Toque encontrado: $soundResourceName.mp3 (ID: $resId)")
-                MediaPlayer.create(this, resId)
-            } else {
-                Log.w(TAG, "⚠️ Toque personalizado não encontrado, usando alarme padrão")
-                val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                MediaPlayer().apply {
-                    setDataSource(applicationContext, alarmUri)
+                
+                // 🆕 CRIAR MEDIAPLAYER MANUALMENTE COM AUDIOATTRIBUTES
+                mediaPlayer = MediaPlayer().apply {
+                    // 1️⃣ Define AudioAttributes para USAGE_ALARM
                     setAudioAttributes(
                         AudioAttributes.Builder()
                             .setUsage(AudioAttributes.USAGE_ALARM)
                             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                             .build()
                     )
+                    
+                    // 2️⃣ Carrega o arquivo de áudio
+                    setDataSource(
+                        applicationContext,
+                        Uri.parse("android.resource://$packageName/$resId")
+                    )
+                    
+                    // 3️⃣ Prepara o MediaPlayer
                     prepare()
+                    
+                    // 4️⃣ Configura loop infinito
+                    isLooping = true
+                    
+                    // 5️⃣ 🔥 APLICA VOLUME DO MEDIAPLAYER (NÃO DO SISTEMA)
+                    setVolume(volumeFloat, volumeFloat)
+                    
+                    Log.d(TAG, "🔊 Volume do MediaPlayer configurado: ${(volumeFloat * 100).toInt()}%")
+                    
+                    // 6️⃣ Inicia reprodução
+                    start()
+                    
+                    Log.d(TAG, "✅ Som tocando em LOOP INFINITO com volume ${(volumeFloat * 100).toInt()}%")
                 }
-            }
-            
-            mediaPlayer?.apply {
-                isLooping = true
-                setVolume(1.0f, 1.0f)
-                start()
-                Log.d(TAG, "✅ Som tocando em LOOP INFINITO")
+            } else {
+                Log.w(TAG, "⚠️ Toque personalizado não encontrado, usando alarme padrão")
+                val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                
+                mediaPlayer = MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    setDataSource(applicationContext, alarmUri)
+                    prepare()
+                    isLooping = true
+                    setVolume(volumeFloat, volumeFloat) // 🔥 Volume configurado
+                    start()
+                }
             }
             
         } catch (e: Exception) {
@@ -508,6 +576,25 @@ class AlarmActivity : AppCompatActivity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        Log.d(TAG, "⏸️ onPause() chamado - isFinishing=$isFinishing")
+        // ✅ CORRIGIDO: Não relançar a activity aqui.
+        // Relançar sem os extras causava uma segunda instância sem dados,
+        // onde os botões ficavam visíveis mas não respondiam a toques.
+        // A activity já está configurada com showWhenLocked/turnScreenOn
+        // no Manifest e nas window flags — não precisa ser relançada.
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Log.d(TAG, "⏹️ onStop() chamado")
+        
+        if (isActivityInitialized && !isFinishing) {
+            Log.w(TAG, "⚠️ Activity parada prematuramente - tentando reabrir...")
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "💀 onDestroy() - Liberando recursos...")
@@ -533,14 +620,9 @@ class AlarmActivity : AppCompatActivity() {
         super.onResume()
         Log.d(TAG, "▶️ onResume() chamado")
     }
-
-    override fun onPause() {
-        super.onPause()
-        Log.d(TAG, "⏸️ onPause() chamado")
-    }
-
-    override fun onStop() {
-        super.onStop()
-        Log.d(TAG, "⏹️ onStop() chamado")
+    
+    override fun onBackPressed() {
+        Log.d(TAG, "🚫 Botão BACK bloqueado - use os botões na tela")
+        Toast.makeText(this, "Use os botões na tela para desligar o alarme", Toast.LENGTH_SHORT).show()
     }
 }

@@ -10,8 +10,13 @@ import {
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
 
+import { useModal } from '../components/ModalContext';
+import UpdateService from '../services/UpdateService';
+
 const SplashScreen = () => {
   const navigation = useNavigation();
+  const { showModal } = useModal();
+
   const [isLoading, setIsLoading] = useState(true);
 
   const iconPulseAnim = useRef(new Animated.Value(1)).current;
@@ -19,6 +24,11 @@ const SplashScreen = () => {
   const backgroundBounceAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    let isMounted = true;
+
+    // ===============================
+    // ANIMAÇÕES
+    // ===============================
     Animated.loop(
       Animated.sequence([
         Animated.timing(iconPulseAnim, {
@@ -64,18 +74,37 @@ const SplashScreen = () => {
       ])
     ).start();
 
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Welcome' as never }],
-        })
-      );
-    }, 3000);
+    // ===============================
+    // INIT
+    // ===============================
+    const init = async () => {
+      try {
+        await UpdateService.run(showModal);
+      } catch (e) {
+        console.log('[Splash] erro no update:', e);
+      }
 
-    return () => clearTimeout(timer);
-  }, [iconPulseAnim, backgroundPulseAnim, backgroundBounceAnim, navigation]);
+      // garante tempo mínimo do splash
+      setTimeout(() => {
+        if (!isMounted) return;
+
+        setIsLoading(false);
+
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'Welcome' as never }],
+          })
+        );
+      }, 3500);
+    };
+
+    init();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [navigation, showModal, iconPulseAnim, backgroundPulseAnim, backgroundBounceAnim]);
 
   return (
     <LinearGradient
@@ -85,16 +114,34 @@ const SplashScreen = () => {
       <StatusBar barStyle="light-content" />
 
       <Animated.View
-        style={[styles.animatedCircle, styles.animatedCircleTopLeft, { transform: [{ scale: backgroundPulseAnim }] }]}
+        style={[
+          styles.animatedCircle,
+          styles.animatedCircleTopLeft,
+          { transform: [{ scale: backgroundPulseAnim }] },
+        ]}
       />
       <Animated.View
-        style={[styles.animatedCircle, styles.bounceCircle, styles.animatedCircleTopRight, { transform: [{ translateY: backgroundBounceAnim }] }]}
+        style={[
+          styles.animatedCircle,
+          styles.bounceCircle,
+          styles.animatedCircleTopRight,
+          { transform: [{ translateY: backgroundBounceAnim }] },
+        ]}
       />
       <Animated.View
-        style={[styles.animatedCircle, styles.animatedCircleBottomLeft, { transform: [{ scale: backgroundPulseAnim }] }]}
+        style={[
+          styles.animatedCircle,
+          styles.animatedCircleBottomLeft,
+          { transform: [{ scale: backgroundPulseAnim }] },
+        ]}
       />
       <Animated.View
-        style={[styles.animatedCircle, styles.bounceCircle, styles.animatedCircleBottomRight, { transform: [{ translateY: backgroundBounceAnim }] }]}
+        style={[
+          styles.animatedCircle,
+          styles.bounceCircle,
+          styles.animatedCircleBottomRight,
+          { transform: [{ translateY: backgroundBounceAnim }] },
+        ]}
       />
 
       <View style={styles.content}>
@@ -116,7 +163,9 @@ const SplashScreen = () => {
 
         <View style={styles.textContainer}>
           <Text style={styles.title}>DoseCerta</Text>
-          <Text style={styles.subtitle}>Sua saúde em dia, sempre na hora certa</Text>
+          <Text style={styles.subtitle}>
+            Sua saúde em dia, sempre na hora certa
+          </Text>
         </View>
 
         {isLoading && (
@@ -128,8 +177,9 @@ const SplashScreen = () => {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Versão 1.0.1</Text>
-        <Text style={styles.footerSmallText}>Cuidando da sua medicação</Text>
+        <Text style={styles.footerSmallText}>
+          Cuidando da sua medicação
+        </Text>
       </View>
     </LinearGradient>
   );
@@ -138,39 +188,23 @@ const SplashScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
+    paddingTop: 200,
   },
   animatedCircle: {
     position: 'absolute',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 9999,
     width: 80,
     height: 80,
   },
-  animatedCircleTopLeft: {
-    top: '10%',
-    left: '10%',
-  },
-  animatedCircleTopRight: {
-    top: '30%',
-    right: '15%',
-  },
-  animatedCircleBottomLeft: {
-    bottom: '20%',
-    left: '20%',
-  },
-  animatedCircleBottomRight: {
-    bottom: '40%',
-    right: '10%',
-  },
-  bounceCircle: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  content: {
-    zIndex: 10,
-    alignItems: 'center',
-  },
+  animatedCircleTopLeft: { top: '10%', left: '10%' },
+  animatedCircleTopRight: { top: '30%', right: '15%' },
+  animatedCircleBottomLeft: { bottom: '20%', left: '20%' },
+  animatedCircleBottomRight: { bottom: '40%', right: '10%' },
+  bounceCircle: { backgroundColor: 'rgba(255,255,255,0.1)' },
+  content: { zIndex: 10, alignItems: 'center' },
   logoWrapper: {
     width: 128,
     height: 128,
@@ -184,60 +218,16 @@ const styles = StyleSheet.create({
     shadowRadius: 15,
     elevation: 20,
   },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  pillIcon: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconText: {
-    fontSize: 40,
-  },
-  textContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  title: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 5,
-    letterSpacing: -1,
-  },
-  subtitle: {
-    fontSize: 18,
-    color: '#E0F2FE',
-    fontWeight: '300',
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    marginTop: 50,
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#E0F2FE',
-    fontSize: 16,
-    marginTop: 10,
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 30,
-    alignItems: 'center',
-  },
-  footerText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 14,
-  },
-  footerSmallText: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 12,
-    marginTop: 5,
-  },
+  iconContainer: { width: 80, height: 80, borderRadius: 16, overflow: 'hidden' },
+  pillIcon: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  iconText: { fontSize: 40 },
+  textContainer: { alignItems: 'center', marginTop: 20 },
+  title: { fontSize: 48, fontWeight: 'bold', color: 'white', marginBottom: 5 },
+  subtitle: { fontSize: 18, color: '#E0F2FE', fontWeight: '300', textAlign: 'center' },
+  loadingContainer: { marginTop: 30, alignItems: 'center' },
+  loadingText: { color: '#E0F2FE', fontSize: 16, marginTop: 10 },
+  footer: { position: 'absolute', bottom: 70, alignItems: 'center' },
+  footerSmallText: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
 });
 
 export default SplashScreen;

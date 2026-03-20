@@ -7,6 +7,11 @@ import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 
+// ✅ IMPORTS NECESSÁRIOS:
+import com.dosecerta.AppCloserPackage
+import com.dosecerta.AlarmPackage // Importação adicionada
+import com.dosecerta.PermissionDialogPackage // Importação adicionada
+
 class MainApplication : Application(), ReactApplication {
 
   override val reactHost: ReactHost by lazy {
@@ -15,7 +20,8 @@ class MainApplication : Application(), ReactApplication {
       packageList =
         PackageList(this).packages.apply {
           add(AlarmPackage())
-          add(PermissionDialogPackage()) // ✅ ADICIONAR ESTA LINHA
+          add(PermissionDialogPackage())
+          add(AppCloserPackage()) // ✅ Seu novo pacote para fechar o app
         },
     )
   }

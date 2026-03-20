@@ -7,8 +7,7 @@ import com.facebook.react.uimanager.ViewManager
 
 /**
  * 📦 PACOTE DE DIÁLOGOS DE PERMISSÕES
- * 
- * Registra o módulo nativo PermissionDialogModule no React Native.
+ * * Registra o módulo nativo PermissionDialogModule no React Native.
  */
 class PermissionDialogPackage : ReactPackage {
 

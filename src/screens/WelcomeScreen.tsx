@@ -9,13 +9,15 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { CommonActions } from '@react-navigation/native'; // <-- NOVO: Importado para usar o reset
+import { CommonActions } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator'; // ajuste o caminho para seu arquivo de tipos
+import DeviceInfo from 'react-native-device-info';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>;
 
 const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
+  const [appVersion, setAppVersion] = useState(''); // Estado para a versão
 
   // Referências de animação
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -24,9 +26,19 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   const iconRotateAnim = useRef(new Animated.Value(0)).current;
   const buttonFadeAnim = useRef(new Animated.Value(0)).current;
   const buttonScaleAnim = useRef(new Animated.Value(0.8)).current;
-
+  
+  // Efeito para carregar a versão e iniciar as animações
   useEffect(() => {
+    // 1. Carregar a versão do aplicativo
+    const loadVersion = () => {
+        const version = DeviceInfo.getVersion();
+        setAppVersion(version);
+    };
+    loadVersion();
+
+    // 2. Definir as funções de animação
     const startAnimations = () => {
+      // Animações iniciais (fade e scale)
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -40,6 +52,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
         }),
       ]).start();
 
+      // Animação de pulso do ícone (loop)
       Animated.loop(
         Animated.sequence([
           Animated.timing(iconPulseAnim, {
@@ -55,6 +68,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
         ])
       ).start();
 
+      // Animação de rotação do ícone (loop)
       Animated.loop(
         Animated.timing(iconRotateAnim, {
           toValue: 1,
@@ -64,9 +78,12 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
       ).start();
     };
 
+    // 3. Temporizador para finalizar o loading e iniciar as animações do botão
     const loadingTimer = setTimeout(() => {
       setIsLoading(false);
       startAnimations();
+      
+      // Animações do botão (após o loading)
       Animated.parallel([
         Animated.timing(buttonFadeAnim, {
           toValue: 1,
@@ -82,7 +99,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
     }, 2000);
 
     return () => clearTimeout(loadingTimer);
-  }, [fadeAnim, scaleAnim, iconPulseAnim, iconRotateAnim, buttonFadeAnim, buttonScaleAnim]);
+  }, [fadeAnim, scaleAnim, iconPulseAnim, iconRotateAnim, buttonFadeAnim, buttonScaleAnim]); // Dependências de animação
 
   const rotate = iconRotateAnim.interpolate({
     inputRange: [0, 1],
@@ -147,6 +164,11 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
             </Animated.View>
           )}
         </View>
+        {/* RODAPÉ FUNCIONAL: appVersion está no estado e é carregado no useEffect */}
+        <View style={styles.footer}>
+          <Text style={styles.versionText}>Versão {appVersion}</Text>
+          <Text style={styles.footerSmallText}>© DoseCerta {new Date().getFullYear()}</Text>
+        </View>        
       </Animated.View>
     </View>
   );
@@ -176,7 +198,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 18, textAlign: 'center', lineHeight: 26, fontWeight: '300' },
   loadingSection: { alignItems: 'center', marginTop: 40 },
   loadingText: { fontSize: 18, marginTop: 16, fontWeight: '300' },
-  buttonContainer: { marginTop: 40, width: '100%', alignItems: 'center' },
+  buttonContainer: { marginTop: 10, width: '100%', alignItems: 'center' },
   beginButton: {
     paddingVertical: 16,
     paddingHorizontal: 32,
@@ -191,6 +213,27 @@ const styles = StyleSheet.create({
   },
   beginButtonText: { fontSize: 18, fontWeight: 'bold', marginRight: 10 },
   beginButtonIcon: { fontSize: 18 },
+  footer: {
+    borderRadius: 10,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    backgroundColor: 'rgba(122, 15, 15, 0.1)',
+  },
+  versionText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    opacity: 0.8,
+    fontWeight: '500',
+  },
+  footerSmallText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    opacity: 0.6,
+    marginTop: 2,
+  },
 });
 
 export default WelcomeScreen;

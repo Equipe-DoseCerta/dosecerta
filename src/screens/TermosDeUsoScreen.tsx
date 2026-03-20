@@ -1,27 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
+import React, { useRef, useEffect } from 'react';
+import { 
+  View, 
+  Text, 
+  ScrollView, 
+  StyleSheet, 
+  Linking, 
   TouchableOpacity,
-  Linking,
-  Image,
   Animated,
-  StatusBar,
   Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { StackNavigationProp } from '@react-navigation/stack';
-import DeviceInfo from 'react-native-device-info';
 
-type RootStackParamList = {
-  Sobre: undefined;
-  LGPD: undefined;
-  TermosDeUso: undefined;
-};
-
-type TermosDeUsoScreenNavigationProp = StackNavigationProp<RootStackParamList, 'TermosDeUso'>;
+import ScreenContainer from '../components/ScreenContainer';
 
 // Componente de Card Animado
 const AnimatedCard: React.FC<{ 
@@ -66,36 +55,6 @@ const EmojiIcon: React.FC<{ emoji: string; size?: number }> = ({ emoji, size = 2
 );
 
 const TermosDeUsoScreen = () => {
-  const navigation = useNavigation<TermosDeUsoScreenNavigationProp>();
-  const [version, setVersion] = useState<string>('');
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const getVersion = async () => {
-      const appVersion = DeviceInfo.getVersion();
-      const buildNumber = DeviceInfo.getBuildNumber();
-      setVersion(`${appVersion} (${buildNumber})`);
-    };
-
-    getVersion();
-
-    // Animação pulsante do logo
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 1.05,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, [scaleAnim]);
-
   const openExternalLink = async (url: string) => {
     try {
       const supported = await Linking.canOpenURL(url);
@@ -109,77 +68,79 @@ const TermosDeUsoScreen = () => {
     }
   };
 
-  const appIcon = require('../../assets/images/icon.png');
+  const handleEmailPress = () => {
+    Linking.openURL('mailto:equipe.dosecerta.app@gmail.com');
+  };
 
   return (
-    <View style={styles.container}>
-      <StatusBar 
-        backgroundColor="#0A7AB8" 
-        barStyle="light-content" 
-        translucent={false}
-      />
-      
+    <ScreenContainer showGradient={true}>
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         bounces={true}
       >
-        {/* Header com Logo Animado */}
+        {/* Header */}
         <AnimatedCard delay={0}>
           <View style={styles.header}>
-            <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-              <View style={styles.logoContainer}>
-                <Image 
-                  source={appIcon}
-                  style={styles.logo} 
-                  resizeMode="contain"
-                />
-              </View>
-            </Animated.View>
-            <Text style={styles.appName}>Termos de Uso</Text>
-            <View style={styles.sloganContainer}>
-              <EmojiIcon emoji="📋" size={18} />
-              <Text style={styles.slogan}>Leia com atenção</Text>
-              <EmojiIcon emoji="✓" size={18} />
+            <View style={styles.iconContainer}>
+              <EmojiIcon emoji="📜" size={48} />
             </View>
+            <Text style={styles.title}>Termos de Uso</Text>
+            <Text style={styles.subtitle}>DoseCerta - Gestão de Medicamentos</Text>
+          </View>
+        </AnimatedCard>
+
+        {/* Card: Introdução */}
+        <AnimatedCard delay={100}>
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <EmojiIcon emoji="👋" size={28} />
+              <Text style={styles.cardTitle}>Bem-vindo ao DoseCerta</Text>
+            </View>
+            <View style={styles.divider} />
+            <Text style={styles.cardText}>
+              Ao utilizar o DoseCerta, você concorda com estes Termos de Uso. 
+              Por favor, leia atentamente antes de prosseguir. Se você não 
+              concordar com qualquer parte destes termos, não utilize o aplicativo.
+            </Text>
           </View>
         </AnimatedCard>
 
         {/* Card: Aceitação dos Termos */}
-        <AnimatedCard delay={100}>
+        <AnimatedCard delay={200}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <EmojiIcon emoji="📜" size={28} />
+              <EmojiIcon emoji="✅" size={28} />
               <Text style={styles.cardTitle}>Aceitação dos Termos</Text>
             </View>
             <View style={styles.divider} />
             <Text style={styles.cardText}>
-              Ao utilizar o aplicativo DoseCerta, você concorda com estes Termos 
-              de Uso. Caso não concorde com qualquer disposição aqui apresentada, 
-              recomendamos que não utilize o aplicativo.
+              Ao acessar e usar o DoseCerta, você aceita e concorda em cumprir 
+              estes Termos de Uso e todas as leis e regulamentos aplicáveis. 
+              Reservamo-nos o direito de modificar estes termos a qualquer momento.
             </Text>
           </View>
         </AnimatedCard>
 
-        {/* Card: Objetivo do Aplicativo */}
-        <AnimatedCard delay={200}>
+        {/* Card: Uso do Aplicativo */}
+        <AnimatedCard delay={300}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <EmojiIcon emoji="🎯" size={28} />
-              <Text style={styles.cardTitle}>Objetivo do Aplicativo</Text>
+              <EmojiIcon emoji="📱" size={28} />
+              <Text style={styles.cardTitle}>Uso do Aplicativo</Text>
             </View>
             <View style={styles.divider} />
-            <Text style={styles.cardText}>
-              O DoseCerta foi desenvolvido para ajudar você a gerenciar seus 
-              medicamentos de forma eficiente, oferecendo:
-            </Text>
             
+            <Text style={styles.cardText}>
+              O DoseCerta é fornecido para:
+            </Text>
+
             <View style={styles.list}>
               {[
-                { emoji: '⏰', text: 'Alertas de horário para medicamentos' },
-                { emoji: '📊', text: 'Controle de estoque' },
-                { emoji: '📝', text: 'Histórico completo de tratamentos' },
-                { emoji: '🔍', text: 'Busca avançada de medicamentos' },
+                { emoji: '💊', text: 'Auxiliar no gerenciamento de medicamentos pessoais' },
+                { emoji: '⏰', text: 'Configurar lembretes para administração de medicamentos' },
+                { emoji: '📊', text: 'Acompanhar o histórico de uso de medicamentos' },
+                { emoji: '📦', text: 'Controlar o estoque de medicamentos' },
               ].map((item, index) => (
                 <View key={index} style={styles.listItem}>
                   <View style={styles.listBullet}>
@@ -193,29 +154,29 @@ const TermosDeUsoScreen = () => {
         </AnimatedCard>
 
         {/* Card: Responsabilidades do Usuário */}
-        <AnimatedCard delay={300}>
+        <AnimatedCard delay={400}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <EmojiIcon emoji="👤" size={28} />
+              <EmojiIcon emoji="⚠️" size={28} />
               <Text style={styles.cardTitle}>Responsabilidades do Usuário</Text>
             </View>
             <View style={styles.divider} />
             
             <Text style={styles.cardText}>
-              Ao utilizar o DoseCerta, você se compromete a:
+              Como usuário, você concorda em:
             </Text>
 
             <View style={styles.list}>
               {[
-                { emoji: '✓', text: 'Fornecer informações verdadeiras e atualizadas' },
-                { emoji: '✓', text: 'Manter a segurança de sua conta e senha' },
-                { emoji: '✓', text: 'Utilizar o aplicativo apenas para fins lícitos' },
-                { emoji: '✓', text: 'Não violar direitos de propriedade intelectual' },
-                { emoji: '✓', text: 'Consultar profissionais de saúde qualificados' },
+                { emoji: '✔️', text: 'Fornecer informações precisas e atualizadas' },
+                { emoji: '🔒', text: 'Manter a confidencialidade de suas informações de acesso' },
+                { emoji: '🚫', text: 'Não usar o aplicativo para fins ilegais ou não autorizados' },
+                { emoji: '👨‍⚕️', text: 'Consultar um profissional de saúde para orientações médicas' },
+                { emoji: '📝', text: 'Seguir as prescrições médicas fornecidas por profissionais qualificados' },
               ].map((item, index) => (
                 <View key={index} style={styles.listItem}>
-                  <View style={styles.responsibilityBullet}>
-                    <EmojiIcon emoji={item.emoji} size={18} />
+                  <View style={styles.listBullet}>
+                    <EmojiIcon emoji={item.emoji} size={20} />
                   </View>
                   <Text style={styles.listText}>{item.text}</Text>
                 </View>
@@ -224,75 +185,61 @@ const TermosDeUsoScreen = () => {
           </View>
         </AnimatedCard>
 
-        {/* Card: Limitação de Responsabilidade */}
-        <AnimatedCard delay={400}>
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <EmojiIcon emoji="⚠️" size={28} />
-              <Text style={styles.cardTitle}>Limitação de Responsabilidade</Text>
-            </View>
-            <View style={styles.divider} />
-            
-            <View style={styles.warningBox}>
-              <EmojiIcon emoji="🏥" size={24} />
-              <Text style={styles.warningText}>
-                <Text style={styles.warningBold}>Importante: </Text>
-                O DoseCerta é uma ferramenta de auxílio e organização. 
-                NÃO substitui consultas, diagnósticos ou tratamentos médicos. 
-                Sempre consulte um profissional de saúde qualificado.
-              </Text>
-            </View>
-
-            <Text style={styles.cardText}>
-              O aplicativo não se responsabiliza por:
-            </Text>
-
-            <View style={styles.list}>
-              {[
-                { emoji: '✗', text: 'Decisões médicas tomadas com base nas informações do app' },
-                { emoji: '✗', text: 'Erros no cadastro de medicamentos pelo usuário' },
-                { emoji: '✗', text: 'Falhas de notificação por problemas do dispositivo' },
-                { emoji: '✗', text: 'Perda de dados por falhas técnicas ou do dispositivo' },
-              ].map((item, index) => (
-                <View key={index} style={styles.listItem}>
-                  <View style={styles.limitationBullet}>
-                    <EmojiIcon emoji={item.emoji} size={18} />
-                  </View>
-                  <Text style={styles.listText}>{item.text}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        </AnimatedCard>
-
-        {/* Card: Privacidade e Segurança */}
+        {/* Card: Limitações de Responsabilidade */}
         <AnimatedCard delay={500}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
+              <EmojiIcon emoji="⚖️" size={28} />
+              <Text style={styles.cardTitle}>Limitações de Responsabilidade</Text>
+            </View>
+            <View style={styles.divider} />
+            
+            <Text style={styles.importantText}>
+              ⚠️ IMPORTANTE: O DoseCerta NÃO substitui o acompanhamento médico profissional.
+            </Text>
+
+            <View style={styles.list}>
+              {[
+                { emoji: '🩺', text: 'Não fornecemos diagnósticos ou tratamentos médicos' },
+                { emoji: '💼', text: 'Não nos responsabilizamos por decisões médicas tomadas com base nas informações do app' },
+                { emoji: '🔧', text: 'O aplicativo é fornecido "como está", sem garantias de qualquer tipo' },
+                { emoji: '📱', text: 'Não garantimos operação ininterrupta ou livre de erros' },
+              ].map((item, index) => (
+                <View key={index} style={styles.listItem}>
+                  <View style={styles.warningBullet}>
+                    <EmojiIcon emoji={item.emoji} size={18} />
+                  </View>
+                  <Text style={styles.listText}>{item.text}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </AnimatedCard>
+
+        {/* Card: Privacidade */}
+        <AnimatedCard delay={600}>
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
               <EmojiIcon emoji="🔐" size={28} />
-              <Text style={styles.cardTitle}>Privacidade e Segurança</Text>
+              <Text style={styles.cardTitle}>Privacidade e Proteção de Dados</Text>
             </View>
             <View style={styles.divider} />
             
             <Text style={styles.cardText}>
-              Seguimos rigorosamente a LGPD (Lei Geral de Proteção de Dados) 
-              para garantir a segurança das suas informações pessoais e de saúde.
+              Levamos sua privacidade a sério. Todos os dados são armazenados 
+              localmente no seu dispositivo e não são compartilhados com terceiros 
+              sem sua autorização explícita.
             </Text>
 
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('LGPD')} 
-              style={styles.linkButton}
-              activeOpacity={0.7}
-            >
-              <EmojiIcon emoji="📄" size={20} />
-              <Text style={styles.linkButtonText}>Saiba mais sobre a LGPD</Text>
-              <EmojiIcon emoji="↗" size={18} />
-            </TouchableOpacity>
+            <Text style={styles.cardText}>
+              Para mais informações, consulte nossa Política de Privacidade e 
+              informações sobre LGPD.
+            </Text>
           </View>
         </AnimatedCard>
 
         {/* Card: Propriedade Intelectual */}
-        <AnimatedCard delay={600}>
+        <AnimatedCard delay={700}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <EmojiIcon emoji="©️" size={28} />
@@ -301,20 +248,20 @@ const TermosDeUsoScreen = () => {
             <View style={styles.divider} />
             
             <Text style={styles.cardText}>
-              Todo o conteúdo do DoseCerta, incluindo textos, gráficos, logos, 
-              ícones e código-fonte, é propriedade exclusiva da equipe DoseCerta 
-              e está protegido pelas leis de direitos autorais.
+              Todo o conteúdo do DoseCerta, incluindo design, logotipos, textos 
+              e código, é protegido por direitos autorais e outras leis de 
+              propriedade intelectual.
             </Text>
 
             <Text style={styles.cardText}>
-              É proibida a reprodução, distribuição ou modificação não autorizada 
-              de qualquer parte do aplicativo.
+              Você não pode reproduzir, distribuir ou criar trabalhos derivados 
+              sem autorização prévia por escrito.
             </Text>
           </View>
         </AnimatedCard>
 
         {/* Card: Modificações */}
-        <AnimatedCard delay={700}>
+        <AnimatedCard delay={800}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <EmojiIcon emoji="🔄" size={28} />
@@ -323,60 +270,60 @@ const TermosDeUsoScreen = () => {
             <View style={styles.divider} />
             
             <Text style={styles.cardText}>
-              Reservamo-nos o direito de modificar estes Termos de Uso a qualquer 
-              momento. As alterações entrarão em vigor imediatamente após sua 
-              publicação no aplicativo.
-            </Text>
-
-            <Text style={styles.cardText}>
-              Recomendamos que você revise periodicamente estes termos para se 
-              manter informado sobre atualizações.
+              Podemos atualizar estes Termos de Uso periodicamente. Notificaremos 
+              você sobre mudanças significativas através do aplicativo. O uso 
+              continuado após as modificações constitui aceitação dos novos termos.
             </Text>
           </View>
         </AnimatedCard>
 
         {/* Card: Contato */}
-        <AnimatedCard delay={800}>
+        <AnimatedCard delay={900}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <EmojiIcon emoji="📧" size={28} />
-              <Text style={styles.cardTitle}>Dúvidas sobre os Termos</Text>
+              <Text style={styles.cardTitle}>Entre em Contato</Text>
             </View>
             <View style={styles.divider} />
             
             <Text style={styles.cardText}>
-              Caso tenha dúvidas sobre estes Termos de Uso, entre em contato:
+              Se você tiver dúvidas sobre estes Termos de Uso, entre em contato:
             </Text>
 
-            <TouchableOpacity 
-              onPress={() => openExternalLink('mailto:equipe.dosecerta.app@gmail.com')} 
-              style={styles.emailButton}
-              activeOpacity={0.7}
-            >
-              <EmojiIcon emoji="✉️" size={20} />
-              <Text style={styles.emailButtonText}>
-                equipe.dosecerta.app@gmail.com
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.contactBox}>
+              <View style={styles.contactItem}>
+                <EmojiIcon emoji="✉️" size={22} />
+                <View style={styles.contactInfo}>
+                  <Text style={styles.contactLabel}>E-mail</Text>
+                  <TouchableOpacity 
+                    onPress={handleEmailPress}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.contactLink}>
+                      equipe.dosecerta.app@gmail.com
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
           </View>
         </AnimatedCard>
 
-        {/* NOVO: Card Versão Web Oficial */}
-        <AnimatedCard delay={850}>
+        {/* Card: Versão Web */}
+        <AnimatedCard delay={950}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <EmojiIcon emoji="📄" size={28} />
-              <Text style={styles.cardTitle}>Versão Web Oficial</Text>
+              <EmojiIcon emoji="🌐" size={28} />
+              <Text style={styles.cardTitle}>Versão Web Completa</Text>
             </View>
             <View style={styles.divider} />
             
             <Text style={styles.cardText}>
-              Acesse a versão completa dos Termos de Uso em nosso 
-              site oficial:
+              Acesse a versão completa dos Termos de Uso em nosso site oficial:
             </Text>
 
             <TouchableOpacity 
-              onPress={() => openExternalLink('https://equipe-dosecerta.github.io/dosecerta-legal/termos-de-uso.html')}
+              onPress={() => openExternalLink('https://dosecerta-9141e.web.app/termos-de-uso.html')}
               style={styles.webButton}
               activeOpacity={0.7}
             >
@@ -387,70 +334,37 @@ const TermosDeUsoScreen = () => {
           </View>
         </AnimatedCard>
 
-        {/* Card: Avaliação */}
-        <AnimatedCard delay={900}>
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <EmojiIcon emoji="⭐" size={28} />
-              <Text style={styles.cardTitle}>Avalie o Aplicativo</Text>
-            </View>
-            <View style={styles.divider} />
-            
-            <Text style={styles.cardText}>
-              Se você concorda com nossos termos e gosta do DoseCerta, 
-              avalie-nos na Play Store!
-            </Text>
-
-            <TouchableOpacity 
-              onPress={() => openExternalLink('https://play.google.com/store/apps/details?id=com.dosecerta')} 
-              style={styles.rateButton}
-              activeOpacity={0.8}
-            >
-              <EmojiIcon emoji="🌟" size={22} />
-              <Text style={styles.rateButtonText}>Avaliar na Play Store</Text>
-            </TouchableOpacity>
-          </View>
-        </AnimatedCard>
-
-        {/* Footer */}
+        {/* Info Box */}
         <AnimatedCard delay={1000}>
-          <View style={styles.footer}>
-            <Text style={styles.versionText}>Versão {version}</Text>
-            <Text style={styles.updateText}>Última atualização: Janeiro de 2025</Text>
-            <View style={styles.copyrightContainer}>
-              <EmojiIcon emoji="©️" size={14} />
-              <Text style={styles.copyrightText}>
-                2025 DoseCerta - Todos os direitos reservados
-              </Text>
-            </View>
+          <View style={styles.infoBox}>
+            <EmojiIcon emoji="📅" size={24} />
+            <Text style={styles.infoText}>
+              Última atualização: Janeiro de 2025
+            </Text>
           </View>
         </AnimatedCard>
       </ScrollView>
-    </View>
+    </ScreenContainer>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 50,
+    paddingHorizontal: 5,
+    paddingTop: 5,
+    paddingBottom: 60,
   },
 
   // Header
   header: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 15,
     marginBottom: 8,
   },
-  logoContainer: {
-    width: 90,
-    height: 90,
-    borderRadius: 24,
+  iconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
@@ -458,36 +372,27 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#0A7AB8',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
         shadowRadius: 12,
       },
       android: {
-        elevation: 8,
+        elevation: 6,
       },
     }),
   },
-  logo: {
-    width: 70,
-    height: 70,
-    borderRadius: 16,
-  },
-  appName: {
-    fontSize: 32,
+  title: {
+    fontSize: 26,
     fontWeight: '700',
-    color: '#0A7AB8',
-    letterSpacing: 0.5,
+    color: '#ffffff',
+    textAlign: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 20,
   },
-  sloganContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    gap: 8,
-  },
-  slogan: {
-    fontSize: 16,
-    color: '#64748B',
-    fontWeight: '500',
+  subtitle: {
+    fontSize: 15,
+    color: '#ffffff',
+    fontWeight: '600',
   },
 
   // Cards
@@ -532,11 +437,23 @@ const styles = StyleSheet.create({
     color: '#475569',
     marginBottom: 12,
   },
+  importantText: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: '#DC2626',
+    fontWeight: '700',
+    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#DC2626',
+  },
 
   // Lists
   list: {
     gap: 12,
-    marginTop: 8,
   },
   listItem: {
     flexDirection: 'row',
@@ -551,19 +468,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  responsibilityBullet: {
+  warningBullet: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#F0FDF4',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  limitationBullet: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#FEF3C7',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -575,68 +484,35 @@ const styles = StyleSheet.create({
     paddingTop: 7,
   },
 
-  // Warning Box
-  warningBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#FEF3C7',
-    borderLeftWidth: 4,
-    borderLeftColor: '#F59E0B',
+  // Contact Box
+  contactBox: {
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginTop: 12,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 12,
   },
-  warningText: {
+  contactInfo: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#92400E',
   },
-  warningBold: {
-    fontWeight: '700',
+  contactLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  contactLink: {
+    fontSize: 15,
+    color: '#0A7AB8',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 
-  // Buttons
-  linkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#EFF6FF',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-  },
-  linkButtonText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0A7AB8',
-    marginLeft: 8,
-  },
-  emailButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 10,
-  },
-  emailButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#0A7AB8',
-  },
-  
-  // NOVO: Web Button
+  // Web Button
   webButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -656,64 +532,21 @@ const styles = StyleSheet.create({
     color: '#059669',
     marginLeft: 8,
   },
-  
-  rateButton: {
+
+  // Info Box
+  infoBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0A7AB8',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 14,
-    marginTop: 8,
-    gap: 10,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0A7AB8',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  },
-  rateButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: 'white',
-    letterSpacing: 0.3,
-  },
-
-  // Footer
-  footer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    backgroundColor: 'white',
-    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    padding: 16,
     gap: 8,
   },
-  versionText: {
-    fontSize: 13,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  updateText: {
-    fontSize: 12,
-    color: '#94A3B8',
-  },
-  copyrightContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
-  },
-  copyrightText: {
-    fontSize: 12,
-    color: '#94A3B8',
-    textAlign: 'center',
+  infoText: {
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '600',
   },
 });
 

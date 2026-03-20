@@ -1,4 +1,3 @@
-
 import { DeviceEventEmitter } from 'react-native';
 import SQLite, { SQLiteDatabase, Transaction, ResultSet, ResultSetRowList, SQLError } from 'react-native-sqlite-storage';
 
@@ -16,23 +15,44 @@ export interface Medicamento {
   notas: string;
   ativo: boolean;
   dosesTotais: number;
+  foto_path?: string | null;
+  tipo_cadastro?: 'alarme' | 'registro' | null;
 }
 
 export interface DoseTomada {
   id?: number;
   medicamento_id: number;
+  dose_id: string;
   horario: string;
   data: string;
   timestamp: string;
 }
 
-const DATABASE_VERSION = 6;
+const DATABASE_VERSION = 8;
 const DB_NAME = 'medicamentos.db';
 
 let db: SQLiteDatabase | null = null;
 
 const onDatabaseError = (error: SQLError) => {
   console.error('Erro no Banco de Dados:', error);
+};
+
+/**
+ * Fecha a conexão com o banco de dados.
+ * Essencial para permitir a substituição do arquivo físico durante a restauração.
+ */
+export const fecharBancoDados = async (): Promise<void> => {
+  if (db) {
+    try {
+      await db.close();
+      db = null;
+      console.log('✅ Conexão com banco de dados encerrada com sucesso.');
+    } catch (err) {
+      console.error('Erro ao fechar banco de dados:', err);
+      // Mesmo com erro, limpamos a referência local
+      db = null;
+    }
+  }
 };
 
 export const initDB = (): Promise<SQLiteDatabase> => {
@@ -48,7 +68,6 @@ export const initDB = (): Promise<SQLiteDatabase> => {
         db = database;
         database.transaction(
           (tx: Transaction) => {
-            // Verificar a versão do banco de dados
             tx.executeSql(
               'PRAGMA user_version',
               [],
@@ -73,51 +92,80 @@ export const initDB = (): Promise<SQLiteDatabase> => {
                       ativo BOOLEAN NOT NULL DEFAULT 1
                     );`
                   );
-                  tx.executeSql(
-                    'PRAGMA user_version = 1'
-                  );
+                  tx.executeSql('PRAGMA user_version = 1');
                 }
 
-                if (currentVersion < 6) {
-                    tx.executeSql(
-                        `PRAGMA table_info(medicamentos)`,
+                if (currentVersion < 8) {
+                  tx.executeSql(
+                    `PRAGMA table_info(medicamentos)`,
+                    [],
+                    (_txMigrate: any, { rows: tableRows }: { rows: ResultSetRowList }) => {
+                      const columns = tableRows.raw();
+                      
+                      const hasUnidade = columns.some((col: any) => col.name === 'unidade');
+                      const hasDosesTotais = columns.some((col: any) => col.name === 'dosesTotais');
+                      const hasAtivo = columns.some((col: any) => col.name === 'ativo');
+                      const hasFotoPath = columns.some((col: any) => col.name === 'foto_path');
+                      const hasTipoCadastro = columns.some((col: any) => col.name === 'tipo_cadastro');
+
+                      if (!hasUnidade) {
+                        tx.executeSql('ALTER TABLE medicamentos ADD COLUMN unidade TEXT', []);
+                      }
+                      if (!hasDosesTotais) {
+                        tx.executeSql('ALTER TABLE medicamentos ADD COLUMN dosesTotais INTEGER', []);
+                      }
+                      if (!hasAtivo) {
+                        tx.executeSql('ALTER TABLE medicamentos ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT 1', []);
+                      }
+                      if (!hasFotoPath) {
+                        tx.executeSql('ALTER TABLE medicamentos ADD COLUMN foto_path TEXT', []);
+                      }
+                      if (!hasTipoCadastro) {
+                        tx.executeSql('ALTER TABLE medicamentos ADD COLUMN tipo_cadastro TEXT DEFAULT "alarme"', []);
+                      }
+
+                      tx.executeSql(
+                        `SELECT name FROM sqlite_master WHERE type='table' AND name='doses_tomadas'`,
                         [],
-                        (_txMigrate: any, { rows: tableRows }: { rows: ResultSetRowList }) => {
-                            const columns = tableRows.raw();
-                            
-                            // Adiciona as colunas 'unidade' e 'dosesTotais' se não existirem
-                            const hasUnidade = columns.some((col: any) => col.name === 'unidade');
-                            const hasDosesTotais = columns.some((col: any) => col.name === 'dosesTotais');
-                            const hasAtivo = columns.some((col: any) => col.name === 'ativo');
-
-                            if (!hasUnidade) {
-                                tx.executeSql('ALTER TABLE medicamentos ADD COLUMN unidade TEXT', []);
-                            }
-                            if (!hasDosesTotais) {
-                                tx.executeSql('ALTER TABLE medicamentos ADD COLUMN dosesTotais INTEGER', []);
-                            }
-                            if (!hasAtivo) {
-                                tx.executeSql('ALTER TABLE medicamentos ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT 1', []);
-                            }
-
+                        (_tx: any, { rows: tableCheck }: { rows: ResultSetRowList }) => {
+                          if (tableCheck.length === 0) {
                             tx.executeSql(`
-                                CREATE TABLE IF NOT EXISTS doses_tomadas (
-                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                    medicamento_id INTEGER NOT NULL,
-                                    horario TEXT NOT NULL,
-                                    data TEXT NOT NULL,
-                                    timestamp TEXT NOT NULL,
-                                    FOREIGN KEY (medicamento_id) REFERENCES medicamentos(id) ON DELETE CASCADE
-                                );
+                              CREATE TABLE IF NOT EXISTS doses_tomadas (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                medicamento_id INTEGER NOT NULL,
+                                dose_id TEXT NOT NULL UNIQUE,
+                                horario TEXT NOT NULL,
+                                data TEXT NOT NULL,
+                                timestamp TEXT NOT NULL,
+                                FOREIGN KEY (medicamento_id) REFERENCES medicamentos(id) ON DELETE CASCADE
+                              );
                             `);
-                            
-                            tx.executeSql(`PRAGMA user_version = ${DATABASE_VERSION}`);
-                        },
-                        (tx_inner: any, error: any) => {
-                            console.error('Erro na migração:', error);
-                            return false;
+                          } else {
+                            tx.executeSql(
+                              `PRAGMA table_info(doses_tomadas)`,
+                              [],
+                              (_tx2: any, { rows: doseColumns }: { rows: ResultSetRowList }) => {
+                                const hasDoseId = doseColumns.raw().some((col: any) => col.name === 'dose_id');
+                                if (!hasDoseId) {
+                                  tx.executeSql('ALTER TABLE doses_tomadas ADD COLUMN dose_id TEXT', []);
+                                  tx.executeSql(
+                                    `UPDATE doses_tomadas SET dose_id = medicamento_id || '-' || id WHERE dose_id IS NULL`,
+                                    []
+                                  );
+                                }
+                              }
+                            );
+                          }
                         }
-                    );
+                      );
+                      
+                      tx.executeSql(`PRAGMA user_version = ${DATABASE_VERSION}`);
+                    },
+                    (tx_inner: any, error: any) => {
+                      console.error('Erro na migração:', error);
+                      return false;
+                    }
+                  );
                 }
               },
               (_txVersionError: any, error: any) => {
@@ -135,26 +183,13 @@ export const initDB = (): Promise<SQLiteDatabase> => {
   });
 };
 
-/**
- * ⚠️ NOVO: Reinicializa a conexão com o banco de dados
- * IMPORTANTE: Chamar após restaurar um backup
- */
 export const reinicializarBancoDados = async (): Promise<void> => {
   try {
-    console.log('🔄 Fechando conexão com banco de dados...');
-    
-    if (db) {
-      await db.close();
-      db = null;
-      console.log('✅ Banco de dados fechado');
-    }
-
-    await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
-
-    console.log('🔄 Reabrindo banco de dados...');
+    console.log('🔄 Reinicializando banco de dados...');
+    await fecharBancoDados();
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 800));
     await initDB();
-    console.log('✅ Banco de dados reaberto');
-
+    console.log('✅ Banco de dados reinicializado com sucesso');
     DeviceEventEmitter.emit('banco-reinicializado');
   } catch (err) {
     console.error('Erro ao reinicializar banco de dados:', err);
@@ -162,9 +197,6 @@ export const reinicializarBancoDados = async (): Promise<void> => {
   }
 };
 
-/**
- * ⚠️ NOVO: Evento para quando o banco é reinicializado (após restauração)
- */
 export const listenBancoReinicializado = (callback: () => void) => {
   return DeviceEventEmitter.addListener('banco-reinicializado', callback);
 };
@@ -185,8 +217,8 @@ export const insertMedicamento = async (med: Omit<Medicamento, 'id'>) => {
         tx.executeSql(
           `INSERT INTO medicamentos (
             nomePaciente, nome, dosagem, tipo, unidade, dosesTotais, duracaoTratamento,
-            horario_inicial, intervalo_horas, dataInicio, notas, ativo
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            horario_inicial, intervalo_horas, dataInicio, notas, ativo, foto_path, tipo_cadastro
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             med.nomePaciente,
             med.nome,
@@ -199,7 +231,9 @@ export const insertMedicamento = async (med: Omit<Medicamento, 'id'>) => {
             med.intervalo_horas,
             med.dataInicio,
             med.notas || '',
-            med.ativo
+            med.ativo,
+            med.foto_path || null,
+            med.tipo_cadastro || 'alarme',
           ],
           (txResult: any, result: ResultSet) => {
             const medicamentoId = result.insertId;
@@ -261,35 +295,19 @@ export const fetchMedicamentoPorId = async (id: number): Promise<Medicamento | n
   });
 };
 
-export const updateMedicamento = async (med: Medicamento & { id: number }) => {
+export const updateMedicamento = async (id: number, med: Partial<Medicamento>) => {
   const database = await initDB();
   return new Promise((resolve, reject) => {
     database.transaction(
       (tx: Transaction) => {
+        const fields = Object.keys(med).map(key => `${key} = ?`).join(', ');
+        const values = [...Object.values(med), id];
         tx.executeSql(
-          `UPDATE medicamentos SET
-            nomePaciente = ?, nome = ?, dosagem = ?, tipo = ?, unidade = ?, dosesTotais = ?,
-            duracaoTratamento = ?, horario_inicial = ?, intervalo_horas = ?,
-            dataInicio = ?, notas = ?, ativo = ?
-          WHERE id = ?`,
-          [
-            med.nomePaciente,
-            med.nome,
-            med.dosagem,
-            med.tipo,
-            med.unidade,
-            med.dosesTotais,
-            med.duracaoTratamento,
-            med.horario_inicial,
-            med.intervalo_horas,
-            med.dataInicio,
-            med.notas || '',
-            med.ativo,
-            med.id
-          ],
-          (txResult: any, result: ResultSet) => {
-            console.log('Medicamento atualizado, agendar novas notificações.');
-            resolve(result.rowsAffected > 0);
+          `UPDATE medicamentos SET ${fields} WHERE id = ?`,
+          values,
+          () => {
+            DeviceEventEmitter.emit('medicamento-atualizado');
+            resolve(true);
           },
           (txError: any, error: SQLError) => {
             reject(error);
@@ -310,10 +328,9 @@ export const deleteMedicamento = async (id: number) => {
         tx.executeSql(
           `DELETE FROM medicamentos WHERE id = ?`,
           [id],
-          async (txResult: any, result: ResultSet) => {
-            console.log('Medicamento deletado, cancelar notificações.');
+          () => {
             emitMedicamentoExcluido(id);
-            resolve(result.rowsAffected > 0);
+            resolve(true);
           },
           (txError: any, error: SQLError) => {
             reject(error);
@@ -326,17 +343,16 @@ export const deleteMedicamento = async (id: number) => {
   });
 };
 
-export const registrarDoseTomada = async (medicamentoId: number, horario: string, data: string) => {
+export const insertDoseTomada = async (dose: Omit<DoseTomada, 'id'>) => {
   const database = await initDB();
   return new Promise((resolve, reject) => {
     database.transaction(
       (tx: Transaction) => {
-        const timestamp = new Date().toISOString();
         tx.executeSql(
-          `INSERT INTO doses_tomadas (medicamento_id, horario, data, timestamp) VALUES (?, ?, ?, ?)`,
-          [medicamentoId, horario, data, timestamp],
+          `INSERT INTO doses_tomadas (medicamento_id, dose_id, horario, data, timestamp) VALUES (?, ?, ?, ?, ?)`,
+          [dose.medicamento_id, dose.dose_id, dose.horario, dose.data, dose.timestamp],
           (txResult: any, result: ResultSet) => {
-            DeviceEventEmitter.emit('dose-tomada', { medicamentoId, horario, data });
+            DeviceEventEmitter.emit('dose-adicionada');
             resolve(result.insertId);
           },
           (txError: any, error: SQLError) => {
@@ -360,6 +376,29 @@ export const fetchDosesTomadas = async (medicamentoId: number): Promise<DoseToma
           [medicamentoId],
           (txResult: any, { rows }: { rows: ResultSetRowList }) => {
             resolve(rows.raw());
+          },
+          (txError: any, error: SQLError) => {
+            reject(error);
+            return false;
+          }
+        );
+      },
+      onDatabaseError
+    );
+  });
+};
+
+export const deleteDoseTomada = async (medicamentoId: number, doseId: string) => {
+  const database = await initDB();
+  return new Promise((resolve, reject) => {
+    database.transaction(
+      (tx: Transaction) => {
+        tx.executeSql(
+          `DELETE FROM doses_tomadas WHERE medicamento_id = ? AND dose_id = ?`,
+          [medicamentoId, doseId],
+          () => {
+            DeviceEventEmitter.emit('dose-removida');
+            resolve(true);
           },
           (txError: any, error: SQLError) => {
             reject(error);

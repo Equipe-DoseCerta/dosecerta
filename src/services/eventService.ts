@@ -10,6 +10,7 @@ type EventMap = {
   'medicamento-excluido': number; // ID do medicamento excluído
   'medicamento-adicionado': undefined; // Sem payload
   'medicamento-editado': number; // ID do medicamento editado
+  'medicamento-desativado': number; // ID do medicamento desativado (encerrado no ControleEstoque)
 };
 
 /**
@@ -73,4 +74,16 @@ export const listenMedicamentoEditado = (
   callback: (id: number) => void
 ) => {
   return listenToEvent('medicamento-editado', callback);
+};
+
+/** Notifica sobre desativação de medicamento (encerrado no ControleEstoque, mantido no histórico) */
+export const emitMedicamentoDesativado = (id: number) => {
+  emitEvent('medicamento-desativado', id);
+};
+
+/** Registra listener para desativação de medicamentos */
+export const listenMedicamentoDesativado = (
+  callback: (id: number) => void
+) => {
+  return listenToEvent('medicamento-desativado', callback);
 };

@@ -1,19 +1,49 @@
 // App.tsx
+console.log('🔥 [App.tsx] Linha 1 - Importando Firebase...');
+import './src/services/firebase'; // ✅ PRIMEIRO IMPORT
+console.log('🔥 [App.tsx] Firebase importado com sucesso!');
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
 import NativeAlarmService from './src/services/NativeAlarmService';
 import { fetchMedicamentos } from './src/database/database';
-import { LogBox } from 'react-native';
+import { StatusBar, LogBox } from 'react-native';
+import NotificationService from './src/services/NotificationService';
+import { ModalProvider } from './src/components/ModalContext';
+
+console.log('🔥 [App.tsx] Todos os imports concluídos!');
+
+// 🔇 Suprimir warnings
+LogBox.ignoreAllLogs(true);
 
 LogBox.ignoreLogs([
-  'InteractionManager has been deprecated and will be removed in a future release.'
+  'This method is deprecated',
+  'React Native Firebase',
+  'will be removed in the next major release',
+  'Please see migration guide',
+  'namespaced API',
+  'modular SDK API',
+  'getApp()',
+  'requestPermission()',
+  'subscribeToTopic()',
+  'onMessage()',
+  'setBackgroundMessageHandler()',
+  'onNotificationOpenedApp()',
+  'getInitialNotification()',
+  'InteractionManager has been deprecated',
+  'Parse Error',
+  'play store page',
+  'latest app version info',
+  'Console messages are currently cleared',
 ]);
 
-
 const App = () => {
+  console.log('🔥 [App.tsx] Componente App renderizado!');
+  
   useEffect(() => {
-    // 🔥 Executado UMA VEZ quando o App monta
+    console.log('🔥 [App.tsx] useEffect executado!');
+    
     const inicializarAlarmes = async () => {
       console.log('📱 App inicializado - Configurando callback de reagendamento...');
       
@@ -29,17 +59,30 @@ const App = () => {
         }
       });
 
-      console.log('📝 Callback de reagendamento registrado');
+      console.log('✔ Callback de reagendamento registrado');
     };
 
     inicializarAlarmes();
-  }, []); // ⚠️ Array vazio = executa APENAS na montagem
+    NotificationService.initialize();
+  }, []);
 
+  console.log('🔥 [App.tsx] Retornando JSX...');
+  
   return (
-    <NavigationContainer>
-      <DrawerNavigator />
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="light-content"
+      />
+      <ModalProvider>
+        <NavigationContainer>
+          <DrawerNavigator />
+        </NavigationContainer>
+      </ModalProvider>
+    </SafeAreaProvider>
   );
 };
 
+console.log('🔥 [App.tsx] App exportado!');
 export default App;

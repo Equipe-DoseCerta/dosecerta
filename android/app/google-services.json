@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "841088768481",
+    "project_id": "dosecerta-9141e",
+    "storage_bucket": "dosecerta-9141e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:841088768481:android:d5b1c924f1fa379067daa0",
+        "android_client_info": {
+          "package_name": "com.dosecerta"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA6z1ihv8J965JeHyQQwTllVv9fl0AAncg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -23,7 +23,7 @@ class PermissionDialogModule(reactContext: ReactApplicationContext) :
         
         // Request codes para permissões
         private const val REQUEST_POST_NOTIFICATIONS = 1001
-        private const val REQUEST_RECORD_AUDIO = 1002
+        // REQUEST_RECORD_AUDIO (1002) removido
     }
 
     private var isShowingDialogs = false
@@ -168,64 +168,49 @@ class PermissionDialogModule(reactContext: ReactApplicationContext) :
                     }
                 }
 
-                // 2️⃣ Áudio (RECORD_AUDIO) - DIÁLOGO NATIVO
-                val hasAudioPermission = reactApplicationContext.checkSelfPermission(
-                    android.Manifest.permission.RECORD_AUDIO
-                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                
-                if (!hasAudioPermission) {
-                    Log.d(TAG, "2️⃣ Solicitando permissão NATIVA: Gravar Áudio")
-                    ActivityCompat.requestPermissions(
-                        activity,
-                        arrayOf(android.Manifest.permission.RECORD_AUDIO),
-                        REQUEST_RECORD_AUDIO
-                    )
-                    return@post
-                }
-
-                // 3️⃣ Full-Screen Intent (Android 14+)
+                // 2️⃣ Full-Screen Intent (Android 14+) - O número de ordem foi ajustado de 3 para 2.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     val notificationManager = reactApplicationContext.getSystemService(
                         Context.NOTIFICATION_SERVICE
                     ) as android.app.NotificationManager
                     
                     if (!notificationManager.canUseFullScreenIntent()) {
-                        Log.d(TAG, "3️⃣ Redirecionando para: Full-Screen Intent")
+                        Log.d(TAG, "2️⃣ Redirecionando para: Full-Screen Intent")
                         openFullScreenIntentSettings()
                         return@post
                     }
                 }
 
-                // 4️⃣ Alarmes Exatos (Android 12+)
+                // 3️⃣ Alarmes Exatos (Android 12+) - O número de ordem foi ajustado de 4 para 3.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val alarmManager = reactApplicationContext.getSystemService(
                         Context.ALARM_SERVICE
                     ) as android.app.AlarmManager
                     
                     if (!alarmManager.canScheduleExactAlarms()) {
-                        Log.d(TAG, "4️⃣ Redirecionando para: Alarmes Exatos")
+                        Log.d(TAG, "3️⃣ Redirecionando para: Alarmes Exatos")
                         openExactAlarmsSettings()
                         return@post
                     }
                 }
 
-                // 5️⃣ Overlay (Exibir sobre outros apps)
+                // 4️⃣ Overlay (Exibir sobre outros apps) - O número de ordem foi ajustado de 5 para 4.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     if (!Settings.canDrawOverlays(reactApplicationContext)) {
-                        Log.d(TAG, "5️⃣ Redirecionando para: Overlay")
+                        Log.d(TAG, "4️⃣ Redirecionando para: Overlay")
                         openOverlaySettings()
                         return@post
                     }
                 }
 
-                // 6️⃣ Bateria (Desativar otimização)
+                // 5️⃣ Bateria (Desativar otimização) - O número de ordem foi ajustado de 6 para 5.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     val pm = reactApplicationContext.getSystemService(
                         Context.POWER_SERVICE
                     ) as android.os.PowerManager
                     
                     if (!pm.isIgnoringBatteryOptimizations(reactApplicationContext.packageName)) {
-                        Log.d(TAG, "6️⃣ Redirecionando para: Bateria")
+                        Log.d(TAG, "5️⃣ Redirecionando para: Bateria")
                         openBatterySettings()
                         return@post
                     }

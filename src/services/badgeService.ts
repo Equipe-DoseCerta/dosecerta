@@ -4,9 +4,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'unreadCounts';
+const LAST_VIEW_KEY = 'lastViewTimestamps';
+const LAST_SYNC_KEY = 'lastSyncTimestamp';
 
 interface UnreadCount {
   [key: string]: number;
+}
+
+interface LastViewTimestamps {
+  [key: string]: string; // ISO timestamp
 }
 
 /**
@@ -59,6 +65,10 @@ export const BadgeService = {
       const current: UnreadCount = stored ? JSON.parse(stored) : {};
       current[screenKey] = 0;
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+      
+      // Atualiza timestamp de última visualização
+      await this.updateLastViewTimestamp(screenKey);
+      
       console.log(`✅ Badge limpo: ${screenKey}`);
     } catch (error) {
       console.warn('❌ Erro ao limpar badge:', error);
@@ -103,6 +113,79 @@ export const BadgeService = {
     } catch (error) {
       console.warn('❌ Erro ao obter badge específico:', error);
       return 0;
+    }
+  },
+
+  /**
+   * Atualiza timestamp de última visualização
+   * @param screenKey - Chave da tela
+   */
+  async updateLastViewTimestamp(screenKey: string): Promise<void> {
+    try {
+      const stored = await AsyncStorage.getItem(LAST_VIEW_KEY);
+      const timestamps: LastViewTimestamps = stored ? JSON.parse(stored) : {};
+      timestamps[screenKey] = new Date().toISOString();
+      await AsyncStorage.setItem(LAST_VIEW_KEY, JSON.stringify(timestamps));
+      console.log(`✅ Timestamp atualizado: ${screenKey} = ${timestamps[screenKey]}`);
+    } catch (error) {
+      console.warn('❌ Erro ao atualizar timestamp:', error);
+    }
+  },
+
+  /**
+   * Obtém timestamp da última visualização
+   * @param screenKey - Chave da tela
+   * @returns ISO timestamp ou null
+   */
+  async getLastViewTimestamp(screenKey: string): Promise<string | null> {
+    try {
+      const stored = await AsyncStorage.getItem(LAST_VIEW_KEY);
+      if (!stored) return null;
+      const timestamps: LastViewTimestamps = JSON.parse(stored);
+      return timestamps[screenKey] || null;
+    } catch (error) {
+      console.warn('❌ Erro ao obter timestamp:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Obtém todos os timestamps de visualização
+   * @returns Objeto com timestamps por tela
+   */
+  async getAllLastViewTimestamps(): Promise<LastViewTimestamps> {
+    try {
+      const stored = await AsyncStorage.getItem(LAST_VIEW_KEY);
+      return stored ? JSON.parse(stored) : {};
+    } catch (error) {
+      console.warn('❌ Erro ao obter timestamps:', error);
+      return {};
+    }
+  },
+
+  /**
+   * Atualiza timestamp da última sincronização
+   */
+  async updateLastSyncTimestamp(): Promise<void> {
+    try {
+      const timestamp = new Date().toISOString();
+      await AsyncStorage.setItem(LAST_SYNC_KEY, timestamp);
+      console.log(`✅ Última sincronização: ${timestamp}`);
+    } catch (error) {
+      console.warn('❌ Erro ao atualizar timestamp de sync:', error);
+    }
+  },
+
+  /**
+   * Obtém timestamp da última sincronização
+   * @returns ISO timestamp ou null
+   */
+  async getLastSyncTimestamp(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(LAST_SYNC_KEY);
+    } catch (error) {
+      console.warn('❌ Erro ao obter timestamp de sync:', error);
+      return null;
     }
   },
 };

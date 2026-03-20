@@ -1,14 +1,15 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
-import { TouchableOpacity, Text, StyleSheet, Dimensions } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, Platform, View } from 'react-native';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
+import { theme } from '../constants/theme';
 
-// Telas
+// Telas Principais
 import SplashScreen from '../screens/SplashScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import HomeScreen from '../screens/HomeScreen';
 import CadastroMedicamento from '../screens/CadastroMedicamento';
-import AlertasScreen from '../screens/AlertasScreen';
+import AlertasScreen from '../screens/MedicamentosAtivosScreen';
 import ControleEstoque from '../screens/ControleEstoqueScreen';
 import Historico from '../screens/HistoricoScreen';
 import BuscarMedicamento from '../screens/BuscarMedicamento';
@@ -16,17 +17,19 @@ import SobreScreen from '../screens/SobreScreen';
 import TermosDeUsoScreen from '../screens/TermosDeUsoScreen';
 import LGPDScreen from '../screens/LGPDScreen';
 
-// Menu
+// Menu e Conteúdo
 import EmConstrucao from '../screens/EmConstrucao';
-import DiretasScreen from '../screens/DiretasScreen';
-import AvisosScreen from '../screens/AvisosScreen';
-import SaudeDiariaScreen from '../screens/SaudeDiariaScreen';
-import VideosScreen from '../screens/VideosScreen';
-import AudiosScreen from '../screens/AudiosScreen';
-import GuiaRemediosScreen from '../screens/GuiaRemediosScreen';
+import MuralScreen from '../screens/MuralScreen';
+
+// Preferências e Suporte
 import PreferenciasAlarmes from '../screens/PreferenciasAlarmes';
 import PreferenciasBackup from '../screens/PreferenciasBackup';
 import AjudaScreen from '../screens/AjudaScreen';
+
+// REMOVIDO: VideosScreen, AudiosScreen e GuiaRemediosScreen
+// foram removidos para conformidade com as políticas do Google Play.
+// Estas telas serão reintroduzidas futuramente quando a conta
+// for migrada para organização.
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -40,297 +43,166 @@ export type RootStackParamList = {
   Sobre: undefined;
   TermosDeUso: undefined;
   LGPD: undefined;
-  Diretas: undefined; 
-  Avisos: undefined;
-  SaudeDiaria: undefined;
-  Videos: undefined;
-  Audios: undefined;
-  GuiaRemedios: undefined;
+  Mural: undefined;
   PreferenciasAlarmes: undefined;
   PreferenciasBackup: undefined;
   EmConstrucao: undefined;
   Ajuda: undefined;
+  // REMOVIDO: Videos, Audios, GuiaRemedios
 };
 
-const Stack = createStackNavigator<RootStackParamList>();
+const Stack = createStackNavigator();
+const HAMBURGER_WIDTH = 44;
 
-// 📱 Detectar tamanho da tela
-const { width } = Dimensions.get('window');
-const isSmallDevice = width < 360;
-const isMediumDevice = width >= 360 && width < 400;
-
-// Componente do ícone hambúrguer
 const HamburgerIcon = () => {
   const navigation = useNavigation();
-  
-  const openDrawer = () => {
-    navigation.dispatch(DrawerActions.openDrawer());
-  };
-
   return (
-    <TouchableOpacity 
-      style={styles.hamburgerButton} 
-      onPress={openDrawer}
+    <TouchableOpacity
+      style={styles.hamburgerButton}
+      onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+      activeOpacity={0.6}
       accessibilityLabel="Abrir menu"
     >
-      <Text style={styles.hamburgerIcon}>☰</Text>
+      <View style={styles.hamburgerIconContainer}>
+        <View style={styles.hamburgerLineLong} />
+        <View style={styles.hamburgerLineShort} />
+        <View style={styles.hamburgerLineLong} />
+      </View>
     </TouchableOpacity>
   );
 };
 
-// Componente para headerLeft personalizado
-const HeaderLeftWithHamburger = () => <HamburgerIcon />;
+const CustomHeaderTitle = ({ children }: { children: string }) => {
+  const title = children;
+  const getFontSize = (text: string) => {
+    if (text.length > 25) return 14;
+    if (text.length > 20) return 16;
+    return 18;
+  };
 
-// Componente para headerLeft nulo (para telas sem hambúrguer)
-const HeaderLeftNull = () => null;
+  return (
+    <View style={styles.titleContainer}>
+      <Text
+        style={[styles.headerTitle, { fontSize: getFontSize(title) }]}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {title}
+      </Text>
+    </View>
+  );
+};
 
-// 🎯 Função para ajustar títulos responsivos
-const getResponsiveTitle = (fullTitle: string, emoji: string) => {
-  if (isSmallDevice) {
-    // Dispositivos pequenos: só emoji
-    return emoji;
-  } else if (isMediumDevice) {
-    // Dispositivos médios: emoji + versão curta
-    const shortTitles: Record<string, string> = {
-      'Cadastrar Medicamento': 'Cadastrar',
-      'Alertas de Medicamentos': 'Alertas',
-      'Controle de Estoque': 'Estoque',
-      'Histórico Medicamentos': 'Histórico',
-      'Buscar Medicamento': 'Buscar',
-      'Sobre o Aplicativo': 'Sobre',
-      'Política de Privacidade': 'Privacidade',
-      'Mensagens Direta': 'Mensagens',
-      'Guia de Rémedios': 'Guia',
-      'Tipo de Alarme': 'Alarme',
-      'Ajustes de Backup': 'Backup',
-    };
-    
-    const shortTitle = shortTitles[fullTitle] || fullTitle;
-    return `${emoji} ${shortTitle}`;
-  } else {
-    // Dispositivos grandes: título completo
-    return `${emoji} ${fullTitle}`;
-  }
+const HeaderRightSpacer = () => <View style={styles.headerRightSpacer} />;
+
+const screenTitles: Record<string, string> = {
+  Home: 'Menu Inicial',
+  CadastroMedicamento: 'Cadastro de Medicamentos',
+  Alertas: 'Medicamentos Ativos',
+  ControleEstoque: 'Controle de Estoque',
+  Historico: 'Histórico de Medicamentos',
+  BuscarMedicamento: 'Buscar Medicamentos',
+  Sobre: 'Sobre o Aplicativo',
+  TermosDeUso: 'Termos',
+  LGPD: 'Privacidade',
+  EmConstrucao: 'Em Breve',
+  Mural: 'Mural de Notícias',
+  PreferenciasAlarmes: 'Configurações de Alarmes',
+  PreferenciasBackup: 'Backup/Restauração',
+  Ajuda: 'Ajuda',
+  // REMOVIDO: Videos, Audios, GuiaRemedios
 };
 
 const AppNavigator = () => {
   return (
-    <Stack.Navigator 
+    <Stack.Navigator
       initialRouteName="Splash"
       screenOptions={{
         headerShown: true,
-        headerStyle: {
-          backgroundColor: '#054f77',
-          elevation: 4,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.25,
-          shadowRadius: 3.84,
-        },
-        headerTintColor: 'white',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-          fontSize: isSmallDevice ? 14 : isMediumDevice ? 16 : 18,
-          color: 'white',
-        },
+        headerStyle: styles.headerStyle,
+        headerTintColor: theme.colors.textWhite,
         headerTitleAlign: 'center',
-        headerLeft: HeaderLeftWithHamburger,
-        // 🔧 Ajuste de espaçamento para evitar sobreposição
-        headerLeftContainerStyle: {
-          paddingLeft: isSmallDevice ? 8 : 12,
-        },
-        headerRightContainerStyle: {
-          paddingRight: isSmallDevice ? 8 : 12,
-        },
-        headerTitleContainerStyle: {
-          // Garante espaço para o hambúrguer e possível botão direito
-          left: isSmallDevice ? 45 : 50,
-          right: isSmallDevice ? 45 : 50,
-        },
+        headerLeft: HamburgerIcon,
+        headerTitle: CustomHeaderTitle,
+        headerLeftContainerStyle: styles.headerLeftContainer,
+        headerRight: HeaderRightSpacer,
       }}
     >
-      <Stack.Screen 
-        name="Splash" 
-        component={SplashScreen} 
-        options={{ 
-          headerShown: false,
-          headerLeft: HeaderLeftNull,
-        }}
-      />
-      <Stack.Screen 
-        name="Welcome" 
-        component={WelcomeScreen} 
-        options={{ 
-          headerShown: false,
-          headerLeft: HeaderLeftNull,
-        }}
-      />
-      <Stack.Screen 
-        name="Home" 
-        component={HomeScreen}
-        options={{ 
-          title: getResponsiveTitle('Menu Inicial', '🗂️'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}
-      />
-      <Stack.Screen 
-        name="CadastroMedicamento" 
-        component={CadastroMedicamento}
-        options={{ 
-          title: getResponsiveTitle('Cadastrar Medicamento', '💊'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}
-      />
-      <Stack.Screen 
-        name="Alertas" 
-        component={AlertasScreen}
-        options={{ 
-          title: getResponsiveTitle('Alertas de Medicamentos', '🔔'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}
-      />
-      <Stack.Screen 
-        name="ControleEstoque" 
-        component={ControleEstoque}
-        options={{ 
-          title: getResponsiveTitle('Controle de Estoque', '📦'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}
-      />
-      <Stack.Screen 
-        name="Historico" 
-        component={Historico}
-        options={{ 
-          title: getResponsiveTitle('Histórico Medicamentos', '📜'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}
-      />
-      <Stack.Screen 
-        name="BuscarMedicamento" 
-        component={BuscarMedicamento}
-        options={{ 
-          title: getResponsiveTitle('Buscar Medicamento', '🔍'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}
-      />
-      <Stack.Screen
-        name='Sobre'
-        component={SobreScreen}
-        options={{ 
-          title: getResponsiveTitle('Sobre o Aplicativo', 'ℹ️'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='TermosDeUso'
-        component={TermosDeUsoScreen}
-        options={{ 
-          title: getResponsiveTitle('Termos de Uso', '📄'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='LGPD'
-        component={LGPDScreen}
-        options={{ 
-          title: getResponsiveTitle('Política de Privacidade', '🔒'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='EmConstrucao'
-        component={EmConstrucao}
-        options={{ 
-          title: getResponsiveTitle('Em Construção', '🚧'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='Diretas'
-        component={DiretasScreen}
-        options={{ 
-          title: getResponsiveTitle('Mensagens Direta', '📮'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='Avisos'
-        component={AvisosScreen}
-        options={{ 
-          title: getResponsiveTitle('Avisos', '📮'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='SaudeDiaria'
-        component={SaudeDiariaScreen}
-        options={{ 
-          title: getResponsiveTitle('Saúde Diária', '🌿'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='Videos'
-        component={VideosScreen}
-        options={{ 
-          title: getResponsiveTitle('Vídeos', '🎥'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='Audios'
-        component={AudiosScreen}
-        options={{ 
-          title: getResponsiveTitle('Áudios', '🔉'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='GuiaRemedios'
-        component={GuiaRemediosScreen}
-        options={{ 
-          title: getResponsiveTitle('Guia de Rémedios', '📘'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='PreferenciasAlarmes'
-        component={PreferenciasAlarmes}
-        options={{ 
-          title: getResponsiveTitle('Tipo de Alarme', '🔔'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='PreferenciasBackup'
-        component={PreferenciasBackup}
-        options={{ 
-          title: getResponsiveTitle('Ajustes de Backup', '💾'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
-      <Stack.Screen
-        name='Ajuda'
-        component={AjudaScreen}
-        options={{ 
-          title: getResponsiveTitle('Ajuda', '🆘'),
-          headerLeft: HeaderLeftWithHamburger,
-        }}      
-      />
+      <Stack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Welcome" component={WelcomeScreen as any} options={{ headerShown: false }} />
+      <Stack.Screen name="Home" component={HomeScreen} options={{ title: screenTitles.Home }} />
+
+      <Stack.Screen name="CadastroMedicamento" component={CadastroMedicamento} options={{ title: screenTitles.CadastroMedicamento }} />
+      <Stack.Screen name="Alertas" component={AlertasScreen} options={{ title: screenTitles.Alertas }} />
+      <Stack.Screen name="ControleEstoque" component={ControleEstoque} options={{ title: screenTitles.ControleEstoque }} />
+      <Stack.Screen name="Historico" component={Historico} options={{ title: screenTitles.Historico }} />
+      <Stack.Screen name="BuscarMedicamento" component={BuscarMedicamento} options={{ title: screenTitles.BuscarMedicamento }} />
+
+      <Stack.Screen name='Sobre' component={SobreScreen} options={{ title: screenTitles.Sobre }} />
+      <Stack.Screen name='TermosDeUso' component={TermosDeUsoScreen} options={{ title: screenTitles.TermosDeUso }} />
+      <Stack.Screen name='LGPD' component={LGPDScreen} options={{ title: screenTitles.LGPD }} />
+
+      <Stack.Screen name='EmConstrucao' component={EmConstrucao as any} options={{ title: screenTitles.EmConstrucao }} />
+      <Stack.Screen name='Mural' component={MuralScreen} options={{ title: screenTitles.Mural }} />
+
+      {/* REMOVIDO: Videos, Audios e GuiaRemedios */}
+
+      <Stack.Screen name='PreferenciasAlarmes' component={PreferenciasAlarmes} options={{ title: screenTitles.PreferenciasAlarmes }} />
+      <Stack.Screen name='PreferenciasBackup' component={PreferenciasBackup} options={{ title: screenTitles.PreferenciasBackup }} />
+      <Stack.Screen name='Ajuda' component={AjudaScreen} options={{ title: screenTitles.Ajuda }} />
     </Stack.Navigator>
   );
 };
 
 const styles = StyleSheet.create({
+  headerStyle: {
+    backgroundColor: theme.colors.primary,
+    elevation: 0,
+    shadowOpacity: 0,
+    borderBottomWidth: 0,
+    height: Platform.OS === 'android' ? 64 : 100,
+  },
+  headerLeftContainer: {
+    paddingLeft: theme.spacing.md,
+  },
+  headerRightSpacer: {
+    width: HAMBURGER_WIDTH + theme.spacing.md,
+  },
   hamburgerButton: {
-    marginLeft: isSmallDevice ? 4 : 8,
-    padding: isSmallDevice ? 6 : 8,
+    width: HAMBURGER_WIDTH,
+    height: HAMBURGER_WIDTH,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    marginLeft: 5,
+  },
+  hamburgerIconContainer: {
+    width: 24,
+    height: 16,
+    justifyContent: 'space-between',
+  },
+  hamburgerLineLong: {
+    width: 22,
+    height: 2.5,
+    backgroundColor: theme.colors.textWhite,
     borderRadius: 4,
   },
-  hamburgerIcon: {
-    fontSize: isSmallDevice ? 20 : 24,
-    color: 'white',
-    fontWeight: 'bold',
+  hamburgerLineShort: {
+    width: 16,
+    height: 2.5,
+    backgroundColor: theme.colors.textWhite,
+    borderRadius: 4,
+  },
+  titleContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontWeight: '700',
+    color: theme.colors.textWhite,
+    textAlign: 'center',
+    letterSpacing: -0.5,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium',
   },
 });
 

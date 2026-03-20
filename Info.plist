@@ -1,0 +1,27 @@
+# Define o diretório raiz do projeto (onde está o package.json)
+ROOT_DIR=${PROJECT_DIR}/..
+
+# O caminho para o Info.plist do seu target principal (ajustado para a sua pasta DoseCerta)
+INFO_PLIST_FILE=${SRCROOT}/DoseCerta/Info.plist
+
+# 1. Lê a versão do package.json
+VERSION=$(/usr/bin/node -pe "require('$ROOT_DIR/package.json').version")
+
+# 2. Divide a versão em Major, Minor e Patch
+VERSION_PARTS=(${VERSION//./ })
+MAJOR=${VERSION_PARTS[0]}
+MINOR=${VERSION_PARTS[1]}
+PATCH=${VERSION_PARTS[2]}
+
+# 3. Calcula o Build Number (CFBundleVersion) usando a mesma lógica do Android
+BUILD_NUMBER=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
+
+# 4. Injeta os valores no Info.plist
+
+# CFBundleShortVersionString (versão visível, ex: "1.0.4")
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$INFO_PLIST_FILE"
+
+# CFBundleVersion (código de build, ex: 10004)
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$INFO_PLIST_FILE"
+
+echo "iOS Version Synced: CFBundleShortVersionString = $VERSION | CFBundleVersion = $BUILD_NUMBER"

@@ -9,7 +9,6 @@ import {
   Animated,
   Image,
   TextInput,
-  StatusBar,
   ScrollView,
 } from 'react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
@@ -20,10 +19,13 @@ import {
   launchImageLibrary,
   ImagePickerResponse,
 } from 'react-native-image-picker';
+import DeviceInfo from 'react-native-device-info';
 import { openCamera } from '../utils/CameraUtils';
 import BadgeService from '../services/badgeService';
-import useAvalie from '../hooks/useAvalie';
-import useCompartilhar from '../hooks/useCompartilhar';
+
+import { abrirLojaApp } from '../services/avalieService';
+import { compartilharApp, divulgarNasRedes } from '../services/compartilharService';
+import { UpdateService } from '../services/UpdateService';
 
 interface MenuItem {
   label: string;
@@ -39,30 +41,37 @@ interface MenuGroup {
   items: MenuItem[];
 }
 
-interface UnreadCount {
-  [key: string]: number;
-}
-
 const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
   navigation,
 }) => {
-  // Estados locais
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [userName, setUserName] = useState('Usuário');
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempUserName, setTempUserName] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
-  const [unreadCounts, setUnreadCounts] = useState<UnreadCount>({});
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [appVersion, setAppVersion] = useState('');
+  const [updateAvailable, setUpdateAvailable] = useState(false);
 
-  // Hooks externos
-  const { abrirLoja, loading: loadingAvalie } = useAvalie();
-  const { compartilharApp, divulgarNasRedes, loading: loadingCompartilhar } = useCompartilhar();
-
-
-  // Animações
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-20)).current;
   const badgeScale = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const checkAppUpdate = async () => {
+      try {
+        const result = await UpdateService.check();
+        if (result.available) {
+          setUpdateAvailable(true);
+        } else {
+          setUpdateAvailable(false);
+        }
+      } catch (err) {
+        setUpdateAvailable(false);
+      }
+    };
+    checkAppUpdate();
+  }, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -88,26 +97,28 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
     }).start();
   }, [unreadCounts, badgeScale]);
 
-  // Carregar dados do usuário
   useEffect(() => {
     const loadUserData = async () => {
       try {
         const storedName = await AsyncStorage.getItem('userName');
         if (storedName) setUserName(storedName);
-
         const storedAvatar = await AsyncStorage.getItem('userAvatar');
         if (storedAvatar) setAvatarUri(storedAvatar);
-
         await loadUnreadCounts();
       } catch (error) {
         console.warn('Erro ao carregar dados do usuário:', error);
       }
     };
 
+    const loadVersion = () => {
+      const version = DeviceInfo.getVersion();
+      setAppVersion(version);
+    };
+
     loadUserData();
+    loadVersion();
   }, []);
 
-  // Notificações / badges
   const loadUnreadCounts = async () => {
     try {
       const counts = await BadgeService.getUnreadCounts();
@@ -127,7 +138,6 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
     }
   };
 
-  // Utilitários de nome
   const formatName = (name: string) =>
     name
       .split(' ')
@@ -149,7 +159,6 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
     setIsEditingName(false);
   };
 
-  // Avatar / imagem
   const handleImageResponse = async (response: ImagePickerResponse) => {
     if (response.didCancel) return;
     if (response.errorCode) {
@@ -170,7 +179,6 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
   };
 
   const handleOpenCamera = () => openCamera(handleImageResponse);
-
   const openGallery = () => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, handleImageResponse);
   };
@@ -183,23 +191,19 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
     ]);
   };
 
-  // Navegação
   const navigateTo = (screenName: string, screenKey: string) => {
     markAsRead(screenKey);
     navigation.closeDrawer();
-    // @ts-ignore - navegação por deep screen do seu stack
+    // @ts-ignore
     navigation.navigate('MainStack', { screen: screenName });
   };
 
-  // Handlers de ações que chamam hooks async, garantindo fechamento do drawer antes
   const performAfterClose = (fn: () => Promise<void> | void, delay = 220) => {
-    // Fecha o drawer e executa fn após curto delay para evitar problemas de contexto
     navigation.closeDrawer();
     setTimeout(() => {
       try {
         const ret = fn();
         if (ret && typeof (ret as any).catch === 'function') {
-          // se retornar promise, trate erros
           (ret as Promise<void>).catch(console.error);
         }
       } catch (e) {
@@ -208,34 +212,39 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
     }, delay);
   };
 
-  const handleAvaliePress = () => performAfterClose(() => abrirLoja());
+  const handleAvaliePress = () => performAfterClose(() => abrirLojaApp());
   const handleEnviarAppPress = () => performAfterClose(() => compartilharApp());
   const handleRedesSociaisPress = () => performAfterClose(() => divulgarNasRedes());
 
-  // Counts
+  const handleHomePress = () => {
+    navigation.closeDrawer();
+    setTimeout(() => {
+      // @ts-ignore
+      navigation.navigate('MainStack', { screen: 'Home' });
+    }, 220);
+  };
+
   const getGroupUnreadCount = (group: MenuGroup): number =>
     group.items.reduce((sum, item) => sum + (unreadCounts[item.screenKey] || 0), 0);
 
-  // Menu definition (mantive sua estrutura)
+  // ==========================================
+  // MENU — Vídeos Educativos, Áudios e Guia de Remédios removidos
+  // para conformidade com as políticas do Google Play.
+  // Estas funcionalidades serão reintroduzidas futuramente
+  // quando a conta for migrada para organização.
+  // ==========================================
   const menuGroups: MenuGroup[] = [
     {
-      title: 'Comunicação',
-      icon: '📬',
-      key: 'comunicacao',
+      title: 'Conteúdo & Notícias',
+      icon: '📰',
+      key: 'conteudo',
       items: [
-        { label: 'Diretas', icon: '📩', screenKey: 'diretas', onPress: () => navigateTo('Diretas', 'diretas') },
-        { label: 'Avisos', icon: '📢', screenKey: 'avisos', onPress: () => navigateTo('Avisos', 'avisos') },
-      ],
-    },
-    {
-      title: 'Educação',
-      icon: '📚',
-      key: 'educacao',
-      items: [
-        { label: 'Saúde Diária', icon: '🌿', screenKey: 'saudeDiaria', onPress: () => navigateTo('SaudeDiaria', 'saudeDiaria') },
-        { label: 'Vídeos', icon: '🎬', screenKey: 'videos', onPress: () => navigateTo('Videos', 'videos') },
-        { label: 'Áudios', icon: '🎧', screenKey: 'audios', onPress: () => navigateTo('Audios', 'audios') },
-        { label: 'Guia de Remédios', icon: '💊', screenKey: 'guiaRemedios', onPress: () => navigateTo('GuiaRemedios', 'guiaRemedios') },
+        {
+          label: 'Mural de Notícias',
+          icon: '🗞️',
+          screenKey: 'mural',
+          onPress: () => navigateTo('Mural', 'mural'),
+        },
       ],
     },
     {
@@ -243,8 +252,18 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
       icon: '🔗',
       key: 'compartilhar',
       items: [
-        { label: 'Enviar para um amigo', icon: '📲', screenKey: 'enviarApp', onPress: handleEnviarAppPress },
-        { label: 'Divulgar nas redes sociais', icon: '📣', screenKey: 'redesSociais', onPress: handleRedesSociaisPress },
+        {
+          label: 'Recomendar o DoseCerta',
+          icon: '🤝',
+          screenKey: 'enviarApp',
+          onPress: handleEnviarAppPress,
+        },
+        {
+          label: 'Publicar nas Redes',
+          icon: '📢',
+          screenKey: 'redesSociais',
+          onPress: handleRedesSociaisPress,
+        },
       ],
     },
     {
@@ -252,9 +271,18 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
       icon: '⚙️',
       key: 'preferencias',
       items: [
-        { label: 'Alarmes', icon: '⏰', screenKey: 'alarmes', onPress: () => navigateTo('PreferenciasAlarmes', 'alarmes') },
-        { label: 'Backup & Restauração', icon: '💾', screenKey: 'backup', onPress: () => navigateTo('PreferenciasBackup', 'backup') },
-        { label: 'Idioma', icon: '🌍', screenKey: 'idioma', onPress: () => navigateTo('EmConstrucao', 'idioma') },
+        {
+          label: 'Alarmes',
+          icon: '⏰',
+          screenKey: 'alarmes',
+          onPress: () => navigateTo('PreferenciasAlarmes', 'alarmes'),
+        },
+        {
+          label: 'Backup & Restauração',
+          icon: '💾',
+          screenKey: 'backup',
+          onPress: () => navigateTo('PreferenciasBackup', 'backup'),
+        },
       ],
     },
     {
@@ -262,11 +290,36 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
       icon: '🆘',
       key: 'suporte',
       items: [
-        { label: 'Ajuda', icon: '❓', screenKey: 'ajuda', onPress: () => navigateTo('Ajuda', 'ajuda') },
-        { label: 'Termos de Uso', icon: '📄', screenKey: 'termos', onPress: () => navigateTo('TermosDeUso', 'termos') },
-        { label: 'Privacidade (LGPD)', icon: '🔒', screenKey: 'lgpd', onPress: () => navigateTo('LGPD', 'lgpd') },
-        { label: 'Sobre o App', icon: 'ℹ️', screenKey: 'sobre', onPress: () => navigateTo('Sobre', 'sobre') },
-        { label: 'Avalie-nos', icon: '⭐', screenKey: 'avalie', onPress: handleAvaliePress },
+        {
+          label: 'Ajuda',
+          icon: '❓',
+          screenKey: 'ajuda',
+          onPress: () => navigateTo('Ajuda', 'ajuda'),
+        },
+        {
+          label: 'Termos de Uso',
+          icon: '📄',
+          screenKey: 'termos',
+          onPress: () => navigateTo('TermosDeUso', 'termos'),
+        },
+        {
+          label: 'Privacidade (LGPD)',
+          icon: '🔒',
+          screenKey: 'lgpd',
+          onPress: () => navigateTo('LGPD', 'lgpd'),
+        },
+        {
+          label: 'Sobre o App',
+          icon: 'ℹ️',
+          screenKey: 'sobre',
+          onPress: () => navigateTo('Sobre', 'sobre'),
+        },
+        {
+          label: 'Avaliar o DoseCerta',
+          icon: '⭐',
+          screenKey: 'avalie',
+          onPress: handleAvaliePress,
+        },
       ],
     },
   ];
@@ -292,15 +345,19 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <LinearGradient colors={['#0A7AB8', '#054F77']} style={styles.gradientBackground}>
         <SafeAreaView style={styles.safeArea}>
           <Animated.View
             style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
-            <TouchableOpacity onPress={() => navigation.closeDrawer()} style={styles.closeButton}>
-              <Text style={styles.closeIcon}>✖</Text>
-            </TouchableOpacity>
+            <View style={styles.topButtonsRow}>
+              <TouchableOpacity onPress={handleHomePress} style={styles.homeButton}>
+                <Text style={styles.homeIcon}>🏠</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.closeDrawer()} style={styles.closeButton}>
+                <Text style={styles.closeIcon}>✖️</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.profileSection}>
               <TouchableOpacity onPress={pickImage} activeOpacity={0.8}>
@@ -329,7 +386,7 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
                       placeholderTextColor="#ffffff80"
                     />
                     <TouchableOpacity onPress={saveUserName} style={styles.saveButton}>
-                      <Text style={styles.saveIcon}>✓</Text>
+                      <Text style={styles.saveIcon}>✔️</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -356,7 +413,10 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
                   key={group.key}
                   style={[styles.menuGroupContainer, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}
                 >
-                  <TouchableOpacity style={styles.menuGroupHeader} onPress={() => setOpenMenu(prev => (prev === group.key ? null : group.key))}>
+                  <TouchableOpacity
+                    style={styles.menuGroupHeader}
+                    onPress={() => setOpenMenu(prev => (prev === group.key ? null : group.key))}
+                  >
                     <View style={styles.menuGroupTitleContainer}>
                       <View style={styles.iconCircle}>
                         <Text style={styles.menuGroupIcon}>{group.icon}</Text>
@@ -373,10 +433,7 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
                     <View style={styles.subItemsContainer}>
                       {group.items.map((item, subIndex) => {
                         const itemUnreadCount = unreadCounts[item.screenKey] || 0;
-                        const isLoading =
-                          (item.screenKey === 'avalie' && loadingAvalie) ||
-                          (item.screenKey === 'enviarApp' && loadingCompartilhar) ||
-                          (item.screenKey === 'redesSociais' && loadingCompartilhar);
+                        const isLoading = false;
 
                         return (
                           <TouchableOpacity
@@ -411,6 +468,29 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
               <Text style={styles.exitIcon}>🚪</Text>
               <Text style={styles.exitText}>Sair do App</Text>
             </TouchableOpacity>
+
+            <View style={styles.versionContainer}>
+              {updateAvailable ? (
+                <TouchableOpacity
+                  onPress={() => UpdateService.openStore()}
+                  style={styles.updateButton}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.updateContent}>
+                    <Text style={styles.updateIcon}>🚀</Text>
+                    <View style={styles.updateTextContainer}>
+                      <Text style={styles.updateTitle}>Atualização Disponível</Text>
+                      <Text style={styles.updateSubtitle}>Toque para atualizar agora</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.versionInfo}>
+                  <Text style={styles.versionText}>Versão {appVersion}</Text>
+                  <Text style={styles.copyrightText}>© DoseCerta {new Date().getFullYear()}</Text>
+                </View>
+              )}
+            </View>
           </ScrollView>
         </SafeAreaView>
       </LinearGradient>
@@ -423,7 +503,15 @@ const styles = StyleSheet.create({
   gradientBackground: { flex: 1 },
   safeArea: { flex: 1 },
   header: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15 },
-  closeButton: { alignSelf: 'flex-end', padding: 8, marginBottom: 10 },
+  topButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  homeButton: { padding: 8 },
+  homeIcon: { fontSize: 20, color: '#FFFFFF' },
+  closeButton: { padding: 8 },
   closeIcon: { fontSize: 20, color: '#FFFFFF' },
   profileSection: { flexDirection: 'row', alignItems: 'center' },
   avatar: {
@@ -488,7 +576,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   menuScrollView: { flex: 1 },
-  menuContent: { paddingHorizontal: 15, paddingTop: 10, paddingBottom: 20 },
+  menuContent: { paddingHorizontal: 15, paddingTop: 10, paddingBottom: 30 },
   menuGroupContainer: { marginBottom: 5 },
   menuGroupHeader: {
     flexDirection: 'row',
@@ -590,7 +678,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 20,
-    marginBottom: 10,
+    marginBottom: 20,
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
@@ -600,6 +688,59 @@ const styles = StyleSheet.create({
   },
   exitIcon: { fontSize: 22, marginRight: 10 },
   exitText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  versionContainer: {
+    marginTop: 10,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+  },
+  versionInfo: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  versionText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  copyrightText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+  },
+  updateButton: {
+    width: '100%',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+  },
+  updateContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  updateIcon: {
+    fontSize: 26,
+    marginRight: 12,
+  },
+  updateTextContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  updateTitle: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  updateSubtitle: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    opacity: 0.9,
+  },
 });
 
 export default CustomDrawerContent;

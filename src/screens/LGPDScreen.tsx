@@ -7,9 +7,10 @@ import {
   Linking, 
   TouchableOpacity,
   Animated,
-  StatusBar,
   Platform,
 } from 'react-native';
+
+import ScreenContainer from '../components/ScreenContainer';
 
 // Componente de Card Animado
 const AnimatedCard: React.FC<{ 
@@ -72,13 +73,7 @@ const LGPDScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar 
-        backgroundColor="#0A7AB8" 
-        barStyle="light-content" 
-        translucent={false}
-      />
-      
+    <ScreenContainer showGradient={true}>
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -88,7 +83,7 @@ const LGPDScreen = () => {
         <AnimatedCard delay={0}>
           <View style={styles.header}>
             <View style={styles.iconContainer}>
-              <EmojiIcon emoji="🔐" size={48} />
+              <EmojiIcon emoji="🔒" size={48} />
             </View>
             <Text style={styles.title}>Lei Geral de Proteção de Dados</Text>
             <Text style={styles.subtitle}>LGPD - Lei nº 13.709/2018</Text>
@@ -125,7 +120,7 @@ const LGPDScreen = () => {
               {[
                 { emoji: '🛡️', text: 'Coletamos apenas dados necessários para as funcionalidades do aplicativo' },
                 { emoji: '🚫', text: 'Não compartilhamos seus dados pessoais com terceiros sem autorização explícita' },
-                { emoji: '🔒', text: 'Mantemos medidas de segurança técnicas e organizacionais para proteger seus dados' },
+                { emoji: '🔐', text: 'Mantemos medidas de segurança técnicas e organizacionais para proteger seus dados' },
                 { emoji: '👤', text: 'Você pode acessar, corrigir ou excluir seus dados a qualquer momento' },
                 { emoji: '👨‍💼', text: 'Temos um encarregado de proteção de dados (DPO) para garantir o cumprimento da LGPD' },
               ].map((item, index) => (
@@ -239,7 +234,7 @@ const LGPDScreen = () => {
           </View>
         </AnimatedCard>
 
-        {/* NOVO: Card Página Web Oficial */}
+        {/* Card Página Web Oficial */}
         <AnimatedCard delay={550}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -254,7 +249,7 @@ const LGPDScreen = () => {
             </Text>
 
             <TouchableOpacity 
-              onPress={() => openExternalLink('https://equipe-dosecerta.github.io/dosecerta-legal/politica-privacidade.html')}
+              onPress={() => openExternalLink('https://dosecerta-9141e.web.app/politica-privacidade.html')}
               style={styles.webButton}
               activeOpacity={0.7}
             >
@@ -276,25 +271,21 @@ const LGPDScreen = () => {
           </View>
         </AnimatedCard>
       </ScrollView>
-    </View>
+    </ScreenContainer>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingHorizontal: 5,
+    paddingTop: 5,
     paddingBottom: 60,
   },
 
   // Header
   header: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: 10,
     marginBottom: 8,
   },
   iconContainer: {
@@ -320,14 +311,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#ffffff',
     textAlign: 'center',
     marginBottom: 8,
     paddingHorizontal: 20,
   },
   subtitle: {
     fontSize: 15,
-    color: '#64748B',
+    color: '#ffffff',
     fontWeight: '600',
   },
 
@@ -462,7 +453,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  // NOVO: Web Button
+  // Web Button
   webButton: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,74 +1,54 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "com.google.gms.google-services"
+apply plugin: 'com.google.firebase.crashlytics'
 
-/**
- * This is the configuration block to customize your React Native Android app.
- * By default you don't need to apply any configuration, just uncomment the lines you need.
- */
+
+
+
+
+
 react {
-    /* Folders */
-    //   The root of your project, i.e. where "package.json" lives. Default is '../..'
-    // root = file("../../")
-    //   The folder where the react-native NPM package is. Default is ../../node_modules/react-native
-    // reactNativeDir = file("../../node_modules/react-native")
-    //   The folder where the react-native Codegen package is. Default is ../../node_modules/@react-native/codegen
-    // codegenDir = file("../../node_modules/@react-native/codegen")
-    //   The cli.js file which is the React Native CLI entrypoint. Default is ../../node_modules/react-native/cli.js
-    // cliFile = file("../../node_modules/react-native/cli.js")
-
-    /* Variants */
-    //   The list of variants to that are debuggable. For those we're going to
-    //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
-    //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    // debuggableVariants = ["liteDebug", "prodDebug"]
-
-    /* Bundling */
-    //   A list containing the node command and its flags. Default is just 'node'.
-    // nodeExecutableAndArgs = ["node"]
-    //
-    //   The command to run when bundling. By default is 'bundle'
-    // bundleCommand = "ram-bundle"
-    //
-    //   The path to the CLI configuration file. Default is empty.
-    // bundleConfig = file(../rn-cli.config.js)
-    //
-    //   The name of the generated asset file containing your JS bundle
-    // bundleAssetName = "MyApplication.android.bundle"
-    //
-    //   The entry file for bundle generation. Default is 'index.android.js' or 'index.js'
-    // entryFile = file("../js/MyApplication.android.js")
-    //
-    //   A list of extra flags to pass to the 'bundle' commands.
-    //   See https://github.com/react-native-community/cli/blob/main/docs/commands.md#bundle
-    // extraPackagerArgs = []
-
-    /* Hermes Commands */
-    //   The hermes compiler command to run. By default it is 'hermesc'
-    // hermesCommand = "$rootDir/my-custom-hermesc/bin/hermesc"
-    //
-    //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
-    // hermesFlags = ["-O", "-output-source-map"]
-
-    /* Autolinking */
     autolinkLibrariesWithApp()
 }
 
-/**
- * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
- */
-def enableProguardInReleaseBuilds = false
+// ===============================================
+// 🚀 BLOCO DE AUTOMAÇÃO DE VERSIONAMENTO (OTIMIZADO)
+// O versionCode (número inteiro) é calculado a partir do versionName (string).
+// Fórmula (X.Y.Z -> X*10000 + Y*100 + Z): 1.0.4 -> 10004, 1.0.5 -> 10005.
+// ===============================================
+def getVersionProps() {
+    def versionProps = [:]
+    def versionPropsFile = new File(rootDir, '../package.json')
+    if (versionPropsFile.exists()) {
+        def jsonText = versionPropsFile.text
+        def json = new groovy.json.JsonSlurper().parseText(jsonText)
+        versionProps.versionName = json.version
+
+        def versionParts = json.version.tokenize('.')
+        def major = versionParts.size() > 0 ? versionParts[0].toInteger() : 0
+        def minor = versionParts.size() > 1 ? versionParts[1].toInteger() : 0
+        def patch = versionParts.size() > 2 ? versionParts[2].toInteger() : 0
+
+        versionProps.versionCode = major * 10000 + minor * 100 + patch
+    } else {
+        throw new GradleException("Could not find package.json at ${rootDir}")
+    }
+    return versionProps
+}
+
+def versionProps = getVersionProps()
+// ===============================================
+
 
 /**
- * The preferred build flavor of JavaScriptCore (JSC)
- *
- * For example, to use the international variant, you can use:
- * `def jscFlavor = io.github.react-native-community:jsc-android-intl:2026004.+`
- *
- * The international variant includes ICU i18n library and necessary data
- * allowing to use e.g. `Date.toLocaleString` and `String.localeCompare` that
- * give correct results when using with locales other than en-US. Note that
- * this variant is about 6MiB larger per architecture than default.
+ * Habilita o ProGuard/R8 no build de release para gerar mapping.txt
+ */
+def enableProguardInReleaseBuilds = true
+
+/**
+ * Define a engine JS padrão (Hermes/JSC)
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
@@ -78,13 +58,17 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.dosecerta"
+
     defaultConfig {
         applicationId "com.dosecerta"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.0.1"
+
+        // 🚀 Versão automática a partir do package.json
+        versionCode versionProps.versionCode
+        versionName versionProps.versionName
     }
+
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -101,22 +85,47 @@ android {
             }
         }
     }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.release // AGORA USA A CONFIGURAÇÃO DE RELEASE
+            signingConfig signingConfigs.release
+
+            // ⚙️ Ativa R8 (minify) e shrinkResources
             minifyEnabled enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            shrinkResources true
+
+            // Usa o arquivo otimizado + regras personalizadas
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
+    }
+
+    packagingOptions {
+        pickFirst 'lib/arm64-v8a/libworklets.so'
+        pickFirst 'lib/armeabi-v7a/libworklets.so'
+        pickFirst 'lib/x86/libworklets.so'
+        pickFirst 'lib/x86_64/libworklets.so'
+    }
+}
+
+
+
+configurations.all {
+    resolutionStrategy {
+        // FORÇA A EXCLUSÃO DE BIBLIOTECAS LEGADAS (ANDROID SUPPORT)
+        // Isso resolve o erro 'Duplicate class android.support.v4...'
+        exclude group: 'com.android.support', module: 'support-v4'
+        exclude group: 'com.android.support', module: 'support-compat'
+        exclude group: 'com.android.support', module: 'support-core-ui'
+        exclude group: 'com.android.support', module: 'support-fragment'
+        exclude group: 'com.google.android.gms', module: 'play-services-ads-identifier'
     }
 }
 
 dependencies {
-    // The version of react-native is set by the React Native Gradle Plugin
+    // React Native core
     implementation("com.facebook.react:react-android")
 
     if (hermesEnabled.toBoolean()) {
@@ -125,9 +134,24 @@ dependencies {
         implementation jscFlavor
     }
 
-    // ✅ AndroidX Dependencies - ADICIONADAS
+    // ✅ AndroidX e Material Design
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.cardview:cardview:1.0.0'
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'com.google.android.material:material:1.11.0'
+    
+
+    // Firebase BoM
+    implementation(platform("com.google.firebase:firebase-bom:34.0.0"))
+    
+    
+    // Firebase Analytics (opcional, mas recomendado)
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-firestore")
+    
+
+    // ML Kit Image Labeling
+    implementation 'com.google.mlkit:image-labeling:17.0.9'
 }

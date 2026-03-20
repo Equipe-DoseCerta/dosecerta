@@ -1,48 +1,40 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.dosecerta">
 
-    <!-- ✅ PERMISSÕES CRÍTICAS PARA ALARMES -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-    
-    <!-- 🚨 CRÍTICO: Permissão para Full-Screen Intent (Android 10+) -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    
-    <!-- ✅ Permissão para overlay (notificações sobre outras apps) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     
-    <!-- ✅ Permissão para notificações (Android 13+) -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    
-    <!-- ✅ Tipos de Foreground Service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-    <!-- ✅ Alarmes exatos (Android 12+) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
-    <!-- 🔋 CRÍTICO: Permissão para desativar otimização de bateria -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
 
-    <!-- 🌐 NOVO: Queries para abrir links externos (Android 11+) -->
+    <!-- Permissões para Android 10 e inferiores -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="29" />
+
+    <!-- Permissão para Android 11+ (API 30+) 
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" 
+        tools:ignore="ScopedStorage" /> -->
+
     <queries>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="http" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.SENDTO" />
-            <data android:scheme="mailto" />
-        </intent>
+        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="https" /></intent>
+        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="http" /></intent>
+        <intent><action android:name="android.intent.action.SENDTO" /><data android:scheme="mailto" /></intent>
+        <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="market"/></intent>
     </queries>
 
     <application
@@ -53,14 +45,16 @@
         android:allowBackup="false"
         android:theme="@style/AppTheme"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="${usesCleartextTraffic}">
+        android:usesCleartextTraffic="true">
 
-        <!-- ✅ Subtipo de Foreground Service (Android 14+) -->
-        <property
-            android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-            android:value="alarm" />
 
-        <!-- ✅ ACTIVITY PRINCIPAL -->
+
+        <!-- Cor de fundo do ícone de notificação -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color"
+            tools:replace="android:resource" />
+
         <activity
             android:name=".MainActivity"
             android:label="@string/app_name"
@@ -68,51 +62,54 @@
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
             android:exported="true">
-
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <intent-filter>
-                <action android:name="REAGENDAR_ALARMES" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
         </activity>
 
-        <!-- 🚨 ALARM ACTIVITY - CONFIGURAÇÃO OTIMIZADA PARA FULL-SCREEN INTENT -->
         <activity
             android:name=".AlarmActivity"
             android:label="Alarme de Medicamento"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"
             android:launchMode="singleInstance"
             android:excludeFromRecents="true"
-            android:taskAffinity=""
-            android:screenOrientation="portrait"
             android:exported="false"
             android:directBootAware="true"
-            android:configChanges="orientation|keyboardHidden|screenSize"
-            
-            android:showOnLockScreen="true"
+            android:showWhenLocked="true"
             android:turnScreenOn="true"
-            android:showWhenLocked="true" />
+            android:showOnLockScreen="true"
+            android:configChanges="orientation|keyboardHidden|screenSize" />
 
-        <!-- ✅ FOREGROUND SERVICE DO ALARME -->
         <service
             android:name=".AlarmService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:directBootAware="true" />
+            android:directBootAware="true"
+            android:foregroundServiceType="specialUse">
+            <property 
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_TYPE" 
+                android:value="Sistema de alarme crítico de saúde que exige interface visual imediata sobre a tela de bloqueio para garantir a administração segura de medicamentos."/>
+        </service>
 
-        <!-- ✅ RECEIVER - Disparo de alarmes -->
+        <service
+            android:name=".NovidadesCheckService" 
+            android:enabled="true"
+            android:exported="false"
+            android:directBootAware="true"
+            android:foregroundServiceType="dataSync" />
+
         <receiver
             android:name=".AlarmReceiver"
             android:enabled="true"
             android:exported="false"
-            android:directBootAware="true" />
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="com.dosecerta.CHECK_NOVIDADES" />
+                <action android:name="com.dosecerta.REAGENDAR_ALARMES" />
+            </intent-filter>
+        </receiver>
 
-        <!-- ✅ RECEIVER - Reagendamento após reiniciar o dispositivo -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"

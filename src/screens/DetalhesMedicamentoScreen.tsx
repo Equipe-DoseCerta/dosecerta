@@ -149,7 +149,7 @@ Compartilhado via Dose Certa
       onRequestClose={handleClose}
     >
       <SafeAreaView style={styles.container}>
-        <StatusBar backgroundColor="rgba(0,0,0,0.6)" barStyle="dark-content" />
+        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
         
         {/* Overlay */}
         <Animated.View

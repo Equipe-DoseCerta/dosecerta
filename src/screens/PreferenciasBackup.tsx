@@ -1,32 +1,29 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   Animated,
-  StatusBar,
   ScrollView,
+  ActivityIndicator,
+  Modal,
+  Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import LinearGradient from 'react-native-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
+import LinearGradient from 'react-native-linear-gradient';
+import * as DocumentPicker from '@react-native-documents/picker';
+import ScreenContainer from '../components/ScreenContainer';
 import {
-  configurarDiretorioBackup,
-  executarBackup,
+  executarBackupRapido,
+  executarBackupEmPasta,
   executarRestauracao,
-  verificarDiretorioConfigurado,
   obterUltimoBackup,
-  listarBackupsDisponiveis,
+  buscarBackupsNaRaiz,
   formatarTamanhoArquivo,
 } from '../services/backupManager';
 import { reinicializarBancoDados } from '../database/database';
-
-interface BackupInfo {
-  configured: boolean;
-  lastBackup: string | null;
-}
+import { theme } from '../constants/theme';
 
 interface BackupFile {
   name: string;
@@ -35,13 +32,125 @@ interface BackupFile {
   date: Date;
 }
 
+interface CustomModalProps {
+  visible: boolean;
+  type: 'info' | 'success' | 'error' | 'confirmation' | 'warning';
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+  onClose: () => void;
+}
+
+const CustomModal: React.FC<CustomModalProps> = ({
+  visible,
+  type,
+  title,
+  message,
+  confirmText,
+  cancelText,
+  onConfirm,
+  onCancel,
+  onClose,
+}) => {
+  const getIcon = () => {
+    switch (type) {
+      case 'success': return '✅';
+      case 'error': return '❌';
+      case 'warning': return '⚠️';
+      case 'confirmation': return '⚠️';
+      default: return 'ℹ️';
+    }
+  };
+
+  const getIconColor = () => {
+    switch (type) {
+      case 'success': return '#4CAF50';
+      case 'error': return '#FF5252';
+      case 'warning': return '#FF9800';
+      case 'confirmation': return '#FF6B6B';
+      default: return '#2196F3';
+    }
+  };
+
+  // ✅ Fecha o modal ANTES de chamar o callback, com delay para a animação
+  // terminar. Evita conflito entre Modal e DocumentPicker no Android.
+  const handleConfirm = () => {
+    onClose();
+    if (onConfirm) setTimeout(onConfirm, 350);
+  };
+
+  const handleCancel = () => {
+    onClose();
+    if (onCancel) setTimeout(onCancel, 350);
+  };
+
+  return (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalContainer} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.modalContent}>
+            <View style={[styles.modalIcon, { backgroundColor: getIconColor() + '20' }]}>
+              <Text style={styles.modalIconText}>{getIcon()}</Text>
+            </View>
+            
+            <Text style={styles.modalTitle}>{title}</Text>
+            <Text style={styles.modalMessage}>{message}</Text>
+
+            <View style={styles.modalButtons}>
+              {cancelText && (
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={handleCancel}
+                >
+                  <Text style={styles.modalButtonTextCancel}>{cancelText}</Text>
+                </TouchableOpacity>
+              )}
+              
+              {confirmText && (
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonConfirm, { backgroundColor: getIconColor() }]}
+                  onPress={handleConfirm}
+                >
+                  <Text style={styles.modalButtonText}>{confirmText}</Text>
+                </TouchableOpacity>
+              )}
+              
+              {!confirmText && !cancelText && (
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonConfirm, { backgroundColor: getIconColor() }]}
+                  onPress={onClose}
+                >
+                  <Text style={styles.modalButtonText}>OK</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
 const PreferenciasBackup = () => {
-  const [backupInfo, setBackupInfo] = useState<BackupInfo>({
-    configured: false,
-    lastBackup: null,
-  });
+  const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [backups, setBackups] = useState<BackupFile[]>([]);
+  const [backupsRaiz, setBackupsRaiz] = useState<BackupFile[]>([]);
+  const [modalListaVisible, setModalListaVisible] = useState(false);
+  
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalConfig, setModalConfig] = useState<Omit<CustomModalProps, 'visible' | 'onClose'>>({
+    type: 'info',
+    title: '',
+    message: '',
+  });
 
   const scaleAnim1 = useRef(new Animated.Value(1)).current;
   const scaleAnim2 = useRef(new Animated.Value(1)).current;
@@ -55,623 +164,579 @@ const PreferenciasBackup = () => {
     }).start();
   }, [fadeAnim]);
 
-  const carregarConfiguracao = useCallback(async () => {
+  const showModal = (config: Omit<CustomModalProps, 'visible' | 'onClose'>) => {
+    setModalConfig(config);
+    setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+  };
+
+  const carregarInformacoes = async () => {
     try {
-      const configured = await verificarDiretorioConfigurado();
-      const lastBackup = await obterUltimoBackup();
-
-      setBackupInfo({
-        configured,
-        lastBackup,
-      });
-
-      if (configured) {
-        const backupsList = await listarBackupsDisponiveis();
-        setBackups(backupsList);
-      }
+      setLastBackup(await obterUltimoBackup());
+      const backupsNaRaiz = await buscarBackupsNaRaiz();
+      setBackupsRaiz(backupsNaRaiz);
     } catch (error) {
-      console.error('Erro ao carregar configuração:', error);
+      console.error(error);
     }
-  }, []);
+  };
 
   useFocusEffect(
-    useCallback(() => {
-      carregarConfiguracao();
-    }, [carregarConfiguracao])
+    React.useCallback(() => {
+      carregarInformacoes();
+    }, [])
   );
 
   const animateButton = (scaleAnim: Animated.Value) => {
     Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
+      Animated.timing(scaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
     ]).start();
   };
 
-  const handleCriarBackup = async () => {
+  const handleMenuCriarBackup = () => {
     animateButton(scaleAnim1);
-
-    if (!backupInfo.configured) {
-      Alert.alert(
-        '📁 Primeira vez?',
-        'Vamos escolher onde salvar seus backups!',
-        [
-          {
-            text: 'Cancelar',
-            style: 'cancel',
-            onPress: () => {
-              Alert.alert(
-                '⚠️ Backup Cancelado',
-                'Você pode criar um backup quando quiser.',
-                [{ text: 'OK' }]
-              );
-            },
-          },
-          {
-            text: 'Escolher Pasta',
-            onPress: async () => {
-              setIsProcessing(true);
-              try {
-                const resultado = await configurarDiretorioBackup();
-
-                if (resultado.success) {
-                  setBackupInfo(prev => ({
-                    ...prev,
-                    configured: true,
-                  }));
-
-                  await executarBackupAgora();
-                } else {
-                  Alert.alert(
-                    '❌ Erro',
-                    resultado.error || 'Não foi possível configurar a pasta'
-                  );
-                  setIsProcessing(false);
-                }
-              } catch (error) {
-                console.error('Erro ao configurar diretório:', error);
-                Alert.alert('❌ Erro', 'Ocorreu um erro inesperado');
-                setIsProcessing(false);
-              }
-            },
-          },
-        ]
-      );
-      return;
-    }
-
-    await executarBackupAgora();
+    showModal({
+      type: 'info',
+      title: '💾 Criar Backup',
+      message: 'Como deseja salvar seus dados?\n\n⚡ Rápido: Salva em "Documents/DoseCerta"\n📂 Escolher: Selecione outra pasta personalizada',
+      confirmText: '⚡ Backup Rápido',
+      cancelText: '📂 Escolher Pasta',
+      onConfirm: iniciarBackupRapido,
+      onCancel: iniciarBackupManual,
+    });
   };
 
-  const executarBackupAgora = async () => {
+  const iniciarBackupRapido = async () => {
     setIsProcessing(true);
-
     try {
-      const resultado = await executarBackup();
-
-      if (resultado.success) {
-        const lastBackup = await obterUltimoBackup();
-        const backupsList = await listarBackupsDisponiveis();
-
-        setBackupInfo(prev => ({
-          ...prev,
-          lastBackup,
-        }));
-        setBackups(backupsList);
-
-        Alert.alert(
-          '✅ Backup Criado!',
-          `Arquivo salvo com sucesso!\n\n📍 Local: ${resultado.path}\n\n💾 Seus dados estão protegidos!`
-        );
+      const result = await executarBackupRapido();
+      if (result.success) {
+        showModal({
+          type: 'success',
+          title: 'Sucesso!',
+          message: 'Backup salvo em "Documents/DoseCerta". Mantemos apenas os 3 arquivos mais recentes.',
+        });
+        await carregarInformacoes();
       } else {
-        Alert.alert('❌ Erro', resultado.error || 'Erro ao criar backup');
+        showModal({
+          type: 'error',
+          title: 'Erro no Backup',
+          message: result.error || 'Falha ao criar backup.',
+        });
       }
-    } catch (error) {
-      console.error('Erro ao criar backup:', error);
-      Alert.alert('❌ Erro', 'Ocorreu um erro inesperado');
+    } catch (err: any) {
+      showModal({
+        type: 'error',
+        title: 'Erro Inesperado',
+        message: err?.message || 'Falha ao processar backup.',
+      });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleRestaurarBackup = async () => {
-    animateButton(scaleAnim2);
+  const iniciarBackupManual = async () => {
+    try {
+      const result = await DocumentPicker.pickDirectory();
+      if (result && result.uri) {
+        setIsProcessing(true);
+        const res = await executarBackupEmPasta(result.uri, false);
+        if (res.success) {
+          showModal({
+            type: 'success',
+            title: 'Backup Concluído',
+            message: 'Backup exportado com sucesso!',
+          });
+          await carregarInformacoes();
+        } else {
+          showModal({
+            type: 'error',
+            title: 'Erro',
+            message: res.error || 'Falha ao salvar na pasta selecionada.',
+          });
+        }
+        setIsProcessing(false);
+      }
+    } catch (err: any) {
+      setIsProcessing(false);
+      if (err?.code !== 'DOCUMENT_PICKER_CANCELED') {
+        showModal({
+          type: 'error',
+          title: 'Erro',
+          message: 'Falha ao selecionar pasta.',
+        });
+      }
+    }
+  };
 
-    if (backups.length === 0) {
-      Alert.alert(
-        '📂 Nenhum backup encontrado',
-        'Você ainda não tem backups salvos. Crie um backup primeiro para poder restaurar depois.',
-        [{ text: 'OK' }]
-      );
+  const handleMenuRestaurar = async () => {
+    animateButton(scaleAnim2);
+    showModal({
+      type: 'info',
+      title: '♻️ Restaurar Dados',
+      message: 'Como deseja localizar seu backup?\n\n🔍 Automático: Abre a pasta "Documents/DoseCerta"\n📂 Manual: Navegar para outra pasta',
+      confirmText: '🔍 Automático',
+      cancelText: '📂 Manual',
+      onConfirm: restaurarAutomatico,
+      onCancel: buscarArquivoExterno,
+      // ✅ Ambos os callbacks recebem delay de 350ms do CustomModal
+    });
+  };
+
+  const restaurarAutomatico = async () => {
+    setIsProcessing(true);
+    let backupsEncontrados: BackupFile[] = [];
+    try {
+      backupsEncontrados = await buscarBackupsNaRaiz();
+      setBackupsRaiz(backupsEncontrados);
+    } catch {
+      // ignora — mostrará "nenhum backup"
+    } finally {
+      setIsProcessing(false);
+    }
+
+    if (backupsEncontrados.length === 0) {
+      showModal({
+        type: 'warning',
+        title: 'Nenhum Backup Encontrado',
+        message: 'Não localizamos arquivos em "Documents/DoseCerta".\n\nIsso pode ocorrer se você reinstalou o app recentemente. Deseja buscar manualmente?',
+        confirmText: '📂 Buscar Manualmente',
+        cancelText: 'Cancelar',
+        onConfirm: buscarArquivoExterno,
+        // CustomModal aplica delay de 350ms antes de chamar onConfirm
+      });
       return;
     }
 
-    // Criar array de opções com os backups
-    const backupOptions: any[] = backups.map((backup, index) => ({
-      text: `${backup.name}\n📊 ${formatarTamanhoArquivo(backup.size)}`,
-      onPress: async () => {
-        Alert.alert(
-          '⚠️ Confirmar Restauração',
-          `Isso vai substituir TODOS os dados atuais pelos dados do backup:\n\n"${backups[index].name}"\n\nTem certeza?`,
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-              text: 'Sim, Restaurar',
-              style: 'destructive',
-              onPress: async () => {
-                setIsProcessing(true);
-                try {
-                  const resultado = await executarRestauracao(backups[index].path);
-
-                  if (resultado.success) {
-                    await reinicializarBancoDados();
-
-                    Alert.alert(
-                      '✅ Backup Restaurado!',
-                      'Os dados foram restaurados com sucesso!\n\n🔄 Todos os dados agora estão disponíveis na aplicação.',
-                      [{ text: 'OK' }]
-                    );
-
-                    carregarConfiguracao();
-                  } else {
-                    Alert.alert('❌ Erro', resultado.error || 'Erro ao restaurar backup');
-                  }
-                } catch (error) {
-                  console.error('Erro ao restaurar backup:', error);
-                  Alert.alert('❌ Erro', 'Ocorreu um erro inesperado');
-                } finally {
-                  setIsProcessing(false);
-                }
-              },
-            },
-          ]
-        );
-      },
-    }));
-
-    // Adicionar botão Cancelar ao final
-    backupOptions.push({
-      text: 'Fechar',
-      style: 'cancel',
-    });
-
-    Alert.alert(
-      '♻️ Escolha um backup',
-      'Selecione qual arquivo deseja restaurar:',
-      backupOptions
-    );
+    // ✅ Tem backups na pasta padrão — mostra lista para o usuário escolher
+    // Os paths retornados por buscarBackupsNaRaiz são caminhos absolutos internos
+    // que executarRestauracao consegue ler diretamente (sem precisar do picker)
+    setModalListaVisible(true);
   };
 
-  const formatarDataHora = (dateString: string | null) => {
-    if (!dateString) return 'Nunca';
+  const selecionarBackupDaLista = (backup: BackupFile) => {
+    setModalListaVisible(false);
+    // Delay para o modal de lista fechar antes de abrir o de confirmação
+    setTimeout(() => {
+      confirmarRestauracao(backup.path, backup.name);
+    }, 300);
+  };
 
+  const buscarArquivoExterno = async () => {
     try {
-      const data = new Date(dateString);
-      return data.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
+      const pickerResult = await DocumentPicker.pick({
+        type: [DocumentPicker.types.allFiles],
+        copyTo: 'cachesDirectory',
       });
-    } catch {
-      return 'Data inválida';
+      const res = pickerResult[0];
+
+      // ✅ executarRestauracao trata content:// copiando para cache internamente.
+      // Passamos o uri original (content://) para que o backupManager faça a cópia
+      // corretamente via RNFS. Se fileCopyUri existir (já é file://), usamos ele.
+      const localPath = (res as any).fileCopyUri || res.uri;
+      const nomeArquivo = res.name || '';
+
+      if (!localPath) {
+        showModal({ type: 'error', title: 'Erro', message: 'Não foi possível acessar o arquivo selecionado.' });
+        return;
+      }
+
+      if (!nomeArquivo.endsWith('.db') && !nomeArquivo.endsWith('.sqlite')) {
+        showModal({
+          type: 'warning',
+          title: 'Arquivo Inválido',
+          message: 'Selecione um arquivo de backup válido com extensão .db',
+        });
+        return;
+      }
+
+      confirmarRestauracao(localPath, nomeArquivo || 'arquivo externo');
+    } catch (err: any) {
+      if (err?.code !== 'DOCUMENT_PICKER_CANCELED') {
+        showModal({ type: 'error', title: 'Erro', message: 'Falha ao selecionar o arquivo.' });
+      }
     }
   };
 
+  const confirmarRestauracao = (path: string, nome: string) => {
+    showModal({
+      type: 'confirmation',
+      title: '⚠️ Atenção!',
+      message: `Isso SUBSTITUIRÁ todos os dados atuais pelos dados do backup:\n\n"${nome}"\n\nEsta ação não pode ser desfeita. Tem certeza?`,
+      confirmText: 'SIM, RESTAURAR',
+      cancelText: 'Cancelar',
+      onConfirm: async () => {
+        setIsProcessing(true);
+        try {
+          const res = await executarRestauracao(path);
+          
+          if (res.success) {
+            await reinicializarBancoDados();
+            await carregarInformacoes();
+            
+            showModal({
+              type: 'success',
+              title: 'Sucesso!',
+              message: 'Dados restaurados com sucesso! O aplicativo foi atualizado com as informações do backup.',
+            });
+          } else {
+            showModal({
+              type: 'error',
+              title: 'Falha na Restauração',
+              message: res.error || 'Não foi possível restaurar o arquivo.',
+            });
+          }
+        } catch (error: any) {
+          showModal({
+            type: 'error',
+            title: 'Erro Crítico',
+            message: 'Ocorreu um erro ao tentar restaurar: ' + (error?.message || 'Erro desconhecido'),
+          });
+        } finally {
+          setIsProcessing(false);
+        }
+      },
+    });
+  };
+
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor="#054F77" />
-      <LinearGradient colors={['#054F77', '#0A7AB8']} style={styles.container}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <Animated.View
-            style={[
-              styles.content,
-              {
-                opacity: fadeAnim,
-              },
-            ]}
-          >
-            {/* Card 1: Criar Backup */}
-            <View style={styles.actionCard}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardTitleRow}>
-                  <Text style={styles.cardEmoji}>💾</Text>
-                  <View style={styles.cardTitleContainer}>
-                    <Text style={styles.cardTitle}>Criar Backup</Text>
-                    <Text style={styles.cardSubtitle}>
-                      {backupInfo.configured
-                        ? 'Salve seus dados agora'
-                        : 'Configure e crie seu primeiro backup'}
-                    </Text>
-                  </View>
-                </View>
-                {backupInfo.configured && (
-                  <View style={styles.statusBadgeSuccess}>
-                    <Text style={styles.statusEmoji}>✅</Text>
-                  </View>
-                )}
-              </View>
+    <ScreenContainer showGradient={true}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.headerContainer}>
+          <Text style={styles.headerTitle}>🔒 Segurança dos Dados</Text>
+          <Text style={styles.headerSub}>Seus medicamentos sempre protegidos</Text>
+        </View>
 
-              <View style={styles.cardContent}>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Último backup:</Text>
-                  <Text style={styles.infoValue}>
-                    {formatarDataHora(backupInfo.lastBackup)}
-                  </Text>
-                </View>
-
-                {backupInfo.configured && backups.length > 0 && (
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Backups salvos:</Text>
-                    <Text style={styles.infoValue}>{backups.length} arquivo(s)</Text>
-                  </View>
-                )}
-
-                {!backupInfo.configured && (
-                  <View style={styles.firstTimeBox}>
-                    <Text style={styles.firstTimeText}>
-                      🎯 Primeira vez? Vamos escolher onde salvar seus backups!
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              <Animated.View style={{ transform: [{ scale: scaleAnim1 }] }}>
-                <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    isProcessing && styles.buttonDisabled,
-                  ]}
-                  onPress={handleCriarBackup}
-                  disabled={isProcessing}
-                  activeOpacity={0.8}
-                >
-                  <LinearGradient
-                    colors={
-                      isProcessing
-                        ? ['#999', '#777']
-                        : ['#4CAF50', '#45B049']
-                    }
-                    style={styles.buttonGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                  >
-                    <Text style={styles.buttonEmoji}>
-                      {isProcessing ? '⏳' : '💾'}
-                    </Text>
-                    <Text style={styles.buttonText}>
-                      {isProcessing
-                        ? 'Processando...'
-                        : backupInfo.configured
-                        ? 'Fazer Backup Agora'
-                        : 'Criar Primeiro Backup'}
-                    </Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </Animated.View>
+        <View style={styles.actionCard}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardEmoji}>💾</Text>
+            <View>
+              <Text style={styles.cardTitle}>Fazer Backup</Text>
+              <Text style={styles.cardSubtitle}>Salvar cópia de segurança agora</Text>
             </View>
-
-            {/* Card 2: Restaurar Backup */}
-            <View style={styles.actionCard}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardTitleRow}>
-                  <Text style={styles.cardEmoji}>♻️</Text>
-                  <View style={styles.cardTitleContainer}>
-                    <Text style={styles.cardTitle}>Restaurar Backup</Text>
-                    <Text style={styles.cardSubtitle}>
-                      Recupere dados anteriores
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.cardContent}>
-                <View style={styles.warningBox}>
-                  <Text style={styles.warningTextLarge}>
-                    ⚠️ Esta ação substituirá todos os dados atuais
-                  </Text>
-                </View>
-
-                {backups.length > 0 ? (
-                  <View style={styles.backupsList}>
-                    <Text style={styles.backupsTitle}>
-                      📦 Backups disponíveis ({backups.length}):
-                    </Text>
-                    {backups.slice(0, 3).map((backup, index) => (
-                      <Text key={index} style={styles.backupItem}>
-                        • {backup.name} ({formatarTamanhoArquivo(backup.size)})
-                      </Text>
-                    ))}
-                    {backups.length > 3 && (
-                      <Text style={styles.moreBackups}>
-                        + {backups.length - 3} backup(s) adicional(is)
-                      </Text>
-                    )}
-                  </View>
-                ) : (
-                  <View style={styles.emptyBox}>
-                    <Text style={styles.emptyText}>
-                      📂 Nenhum backup encontrado ainda
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              <Animated.View style={{ transform: [{ scale: scaleAnim2 }] }}>
-                <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    (isProcessing || backups.length === 0) &&
-                      styles.buttonDisabled,
-                  ]}
-                  onPress={handleRestaurarBackup}
-                  disabled={isProcessing || backups.length === 0}
-                  activeOpacity={0.8}
-                >
-                  <LinearGradient
-                    colors={
-                      isProcessing || backups.length === 0
-                        ? ['#999', '#777']
-                        : ['#FF6B6B', '#FF5252']
-                    }
-                    style={styles.buttonGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                  >
-                    <Text style={styles.buttonEmoji}>♻️</Text>
-                    <Text style={styles.buttonText}>
-                      {backups.length === 0 ? 'Nenhum Backup' : 'Selecionar Backup'}
-                    </Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </Animated.View>
-            </View>
-
-            {/* Help Card */}
-            <View style={styles.helpCard}>
-              <Text style={styles.helpEmoji}>💡</Text>
-              <View style={styles.helpTextContainer}>
-                <Text style={styles.helpTitle}>Dicas importantes:</Text>
-                <Text style={styles.helpText}>
-                  • Faça backups regularmente{'\n'}
-                  • Guarde os arquivos em local seguro{'\n'}
-                  • Restaurar substitui todos os dados atuais{'\n'}
-                  • Backup do dia será sobrescrito se criar novamente{'\n'}
-                  • Formato: backup_dosecerta_DD-MM-AAAA.db
-                </Text>
-              </View>
-            </View>
+          </View>
+          <View style={styles.cardInfo}>
+            <Text style={styles.infoText}>
+              Último backup: <Text style={styles.boldText}>{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nunca realizado'}</Text>
+            </Text>
+            <Text style={styles.infoTextPath}>
+              Local: Documents/DoseCerta/
+            </Text>
+          </View>
+          <Animated.View style={{ transform: [{ scale: scaleAnim1 }] }}>
+            <TouchableOpacity
+              style={[styles.actionButton, isProcessing && styles.disabled]}
+              onPress={handleMenuCriarBackup}
+              disabled={isProcessing}
+            >
+              <LinearGradient colors={['#4CAF50', '#45B049']} style={styles.btnGradient}>
+                {isProcessing ? <ActivityIndicator color="white" /> : <Text style={styles.btnText}>Criar Novo Backup</Text>}
+              </LinearGradient>
+            </TouchableOpacity>
           </Animated.View>
-        </ScrollView>
-      </LinearGradient>
-    </SafeAreaView>
+        </View>
+
+        <View style={styles.actionCard}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardEmoji}>♻️</Text>
+            <View>
+              <Text style={styles.cardTitle}>Restaurar Dados</Text>
+              <Text style={styles.cardSubtitle}>Recuperar informações salvas</Text>
+            </View>
+          </View>
+          <View style={styles.cardInfo}>
+            {backupsRaiz.length > 0 ? (
+              <View>
+                <Text style={styles.infoText}>Backups encontrados (Máx. 3):</Text>
+                {backupsRaiz.slice(0, 3).map((b, i) => (
+                  <Text key={i} style={styles.backupItem}>
+                    {i === 0 ? '🟢' : '⚪'} {b.date.toLocaleString()} ({formatarTamanhoArquivo(b.size)})
+                  </Text>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.infoText}>Nenhum backup automático encontrado na pasta padrão.</Text>
+            )}
+          </View>
+          <Animated.View style={{ transform: [{ scale: scaleAnim2 }] }}>
+            <TouchableOpacity
+              style={[styles.actionButton, isProcessing && styles.disabled]}
+              onPress={handleMenuRestaurar}
+              disabled={isProcessing}
+            >
+              <LinearGradient colors={['#FF6B6B', '#FF5252']} style={styles.btnGradient}>
+                {isProcessing ? <ActivityIndicator color="white" /> : <Text style={styles.btnText}>Restaurar Backup</Text>}
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </ScrollView>
+
+      {/* ✅ Modal de lista de backups — aparece no fluxo Automático */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalListaVisible}
+        onRequestClose={() => setModalListaVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setModalListaVisible(false)}>
+          <Pressable style={styles.modalContainer} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalContent}>
+              <View style={[styles.modalIcon]}>
+                <Text style={styles.modalIconText}>📋</Text>
+              </View>
+              <Text style={styles.modalTitle}>Selecionar Backup</Text>
+              <Text style={styles.modalMessage}>
+                Escolha qual backup deseja restaurar{'\n'}(🟢 = mais recente)
+              </Text>
+              <View style={ styles.backupListContainer }>
+                {backupsRaiz.slice(0, 3).map((b, i) => (
+                  <TouchableOpacity
+                    key={b.path}
+                    style={[styles.backupListItem, i === 0 && styles.backupListItemFirst]}
+                    onPress={() => selecionarBackupDaLista(b)}
+                  >
+                    <Text style={styles.backupListEmoji}>{i === 0 ? '🟢' : '⚪'}</Text>
+                    <View style={ styles.backupListInfo }>
+                      <Text style={styles.backupListDate}>
+                        {b.date.toLocaleString('pt-BR')}
+                      </Text>
+                      <Text style={styles.backupListSize}>
+                        {formatarTamanhoArquivo(b.size)}
+                      </Text>
+                    </View>
+                    <Text style={styles.backupListArrow}>›</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setModalListaVisible(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <CustomModal
+        visible={modalVisible}
+        onClose={closeModal}
+        {...modalConfig}
+      />
+    </ScreenContainer>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#054F77',
+  scrollContent: { 
+    padding: theme.spacing.md,
+    paddingBottom: theme.spacing.xl,
   },
-  container: {
-    flex: 1,
+  headerContainer: { 
+    marginBottom: theme.spacing.lg,
   },
-  scrollView: {
-    flex: 1,
+  headerTitle: { 
+    fontSize: 24, 
+    fontWeight: 'bold', 
+    color: '#fff',
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
-  scrollContent: {
-    padding: 16,
-    paddingTop: 20,
-    paddingBottom: 20,
+  headerSub: { 
+    fontSize: 14, 
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 4,
   },
-  content: {
-    width: '100%',
+  actionCard: { 
+    backgroundColor: '#fff', 
+    borderRadius: theme.borderRadius.lg, 
+    padding: theme.spacing.lg, 
+    marginBottom: theme.spacing.lg,
+    ...theme.shadows.medium,
   },
-  actionCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
+  cardHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: theme.spacing.md,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
+  cardEmoji: { 
+    fontSize: 32, 
+    marginRight: theme.spacing.md,
   },
-  cardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
+  cardTitle: { 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    color: theme.colors.primary,
   },
-  cardEmoji: {
-    fontSize: 28,
-    marginRight: 10,
-  },
-  cardTitleContainer: {
-    flex: 1,
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#054F77',
-    marginBottom: 3,
-  },
-  cardSubtitle: {
-    fontSize: 12,
+  cardSubtitle: { 
+    fontSize: 13, 
     color: '#666',
+    marginTop: 2,
   },
-  statusBadgeSuccess: {
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+  cardInfo: { 
+    backgroundColor: '#F5F7FA', 
+    padding: theme.spacing.md, 
+    borderRadius: theme.borderRadius.md, 
+    marginBottom: theme.spacing.md,
   },
-  statusEmoji: {
-    fontSize: 18,
+  infoText: { 
+    fontSize: 13, 
+    color: '#555',
+    lineHeight: 18,
   },
-  cardContent: {
-    marginBottom: 14,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  infoLabel: {
-    fontSize: 13,
+  infoTextPath: {
+    marginTop: 4, 
+    fontSize: 11, 
     color: '#888',
-    fontWeight: '500',
   },
-  infoValue: {
-    fontSize: 13,
-    color: '#054F77',
-    fontWeight: '600',
-    flex: 1,
-    textAlign: 'right',
-    marginLeft: 8,
+  boldText: { 
+    fontWeight: 'bold',
+    color: theme.colors.primary,
   },
-  firstTimeBox: {
-    backgroundColor: '#E3F2FD',
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: '#2196F3',
+  backupItem: { 
+    fontSize: 12, 
+    color: '#444', 
+    marginTop: 6,
+    paddingLeft: theme.spacing.sm,
   },
-  firstTimeText: {
-    fontSize: 12,
-    color: '#1565C0',
-    textAlign: 'center',
-    fontWeight: '500',
+  actionButton: { 
+    borderRadius: theme.borderRadius.lg, 
+    overflow: 'hidden',
+    ...theme.shadows.small,
   },
-  actionButton: {
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  buttonDisabled: {
+  disabled: { 
     opacity: 0.6,
   },
-  buttonGradient: {
+  btnGradient: { 
+    padding: theme.spacing.md, 
+    alignItems: 'center',
+  },
+  btnText: { 
+    color: '#fff', 
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '85%',
+    maxWidth: 400,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    backgroundColor: '#2196F320' 
+  },
+  modalIconText: {
+    fontSize: 32,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalButtonConfirm: {
+    backgroundColor: '#2196F3',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#F5F5F5',
+    marginTop: 16, width: '100%'
+  },
+  modalButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  backupListItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 18,
-    borderRadius: 12,
-  },
-  buttonEmoji: {
-    fontSize: 18,
-    marginRight: 7,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  warningBox: {
-    backgroundColor: '#FFEBEE',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: '#FF5252',
-  },
-  warningTextLarge: {
-    fontSize: 13,
-    color: '#C62828',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  backupsList: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 4,
-  },
-  backupsTitle: {
-    fontSize: 12,
-    color: '#054F77',
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  backupItem: {
-    fontSize: 11,
-    color: '#054F77',
-    marginBottom: 3,
-    fontWeight: '500',
-  },
-  moreBackups: {
-    fontSize: 10,
-    color: '#999',
-    fontStyle: 'italic',
-    marginTop: 3,
-  },
-  emptyBox: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 4,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-  },
-  helpCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     padding: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    marginTop: 6,
+    borderColor: '#E2E8F0',
+    gap: 10,
   },
-  helpEmoji: {
-    fontSize: 22,
-    marginRight: 10,
-    marginTop: 1,
+  backupListItemFirst: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
   },
-  helpTextContainer: {
-    flex: 1,
+  backupListEmoji: {
+    fontSize: 18,
   },
-  helpTitle: {
+  backupListDate: {
     fontSize: 13,
-    color: '#fff',
     fontWeight: '600',
-    marginBottom: 5,
+    color: '#1E293B',
   },
-  helpText: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.9)',
-    lineHeight: 18,
+  backupListSize: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  backupListArrow: {
+    fontSize: 20,
+    color: '#94A3B8',
+    fontWeight: '300',
+  },
+  modalButtonTextCancel: {
+    color: '#666',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  backupListContainer: {
+    width: '100%',
+    gap: 8,
+  },
+
+  backupListInfo: {
+    flex: 1,
   },
 });
 

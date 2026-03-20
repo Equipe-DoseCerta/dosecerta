@@ -1,31 +1,46 @@
 // src/services/notificationUtils.ts
-import PushNotification from 'react-native-push-notification';
+import notifee, { 
+  AndroidImportance, 
+  TriggerType, 
+  TimestampTrigger 
+} from '@notifee/react-native';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Medicamento } from '../database/database';
 
 /**
- * 🔔 Configura canal de notificação Android
+ * 🔔 Configura canal de notificação Android para MEDICAMENTOS
  */
-export const configurarCanalNotificacao = () => {
+export const configurarCanalNotificacao = async () => {
   if (Platform.OS === 'android') {
-    PushNotification.createChannel(
-      {
-        channelId: 'medicamentos',
-        channelName: 'Lembretes de Medicamentos',
-        channelDescription: 'Canal para alarmes de medicamentos',
-        playSound: true,
-        soundName: 'toque1.mp3',
-        importance: 4, // MAX
-        vibrate: true,
-      },
-      (created: boolean) => console.log('✅ Canal de notificação criado:', created)
-    );
+    await notifee.createChannel({
+      id: 'medicamentos',
+      name: 'Lembretes de Medicamentos',
+      importance: AndroidImportance.HIGH,
+      sound: 'default', 
+      vibration: true,
+    });
+    console.log('✅ Canal de medicamentos configurado');
   }
 };
 
 /**
- * 💊 Calcula todas as doses a partir da data inicial
+ * 🆕 Configura canal de notificação Android para NOVIDADES
+ */
+export const configurarCanalNovidades = async () => {
+  if (Platform.OS === 'android') {
+    await notifee.createChannel({
+      id: 'novidades_channel',
+      name: 'Novidades do Sistema',
+      importance: AndroidImportance.HIGH,
+      vibration: true,
+    });
+    console.log('✅ Canal de novidades configurado');
+  }
+};
+
+/**
+ * 💊 Calcula todas as doses a partir da data inicial (Lógica mantida)
  */
 function calcularTodasDoses(
   horarioInicial: string,
@@ -54,19 +69,16 @@ function calcularTodasDoses(
 
   for (let i = 0; i < maxDoses; i++) {
     if (dataDoseAtual > dataFim) break;
-
     const horas = dataDoseAtual.getHours().toString().padStart(2, '0');
     const minutos = dataDoseAtual.getMinutes().toString().padStart(2, '0');
-
     doses.push({ horario: `${horas}:${minutos}`, data: new Date(dataDoseAtual) });
     dataDoseAtual = new Date(dataDoseAtual.getTime() + intervaloMs);
   }
-
   return doses;
 }
 
 /**
- * 🔔 Agendar notificações para um único medicamento (RN puro)
+ * 🔔 Agendar notificações via Notifee Triggers
  */
 export const agendarNotificacoesParaMedicamento = async (med: Medicamento) => {
   try {
@@ -83,25 +95,33 @@ export const agendarNotificacoesParaMedicamento = async (med: Medicamento) => {
       dataInicial
     );
 
-    const agora = new Date();
+    const agora = new Date().getTime();
 
     for (const dose of doses) {
-      if (dose.data > agora) {
-        const uniqueId = `${med.id}_${dose.data.getTime()}`;
+      const timestampDose = dose.data.getTime();
+      
+      if (timestampDose > agora) {
+        const trigger: TimestampTrigger = {
+          type: TriggerType.TIMESTAMP,
+          timestamp: timestampDose,
+          alarmManager: { allowWhileIdle: true },
+        };
 
-        PushNotification.localNotificationSchedule({
-          /* iOS e Android compatível */
-          id: uniqueId,
-          channelId: 'medicamentos',
-          title: `Hora do medicamento: ${med.nome}`,
-          message: `Dose: ${med.dosagem}`,
-          date: dose.data,
-          allowWhileIdle: true,
-          playSound: true,
-          soundName: Platform.OS === 'android' ? 'toque1.mp3' : 'default',
-          vibrate: true,
-          // repeatType removido para evitar conflito de tipos
-        });
+        await notifee.createTriggerNotification(
+          {
+            id: `${med.id}_${timestampDose}`,
+            title: `Hora do medicamento: ${med.nome}`,
+            body: `Dose: ${med.dosagem}`,
+            android: {
+              channelId: 'medicamentos',
+              importance: AndroidImportance.HIGH,
+              pressAction: { id: 'default' },
+              color: '#0A7AB8',
+              smallIcon: 'ic_launcher',
+            },
+          },
+          trigger,
+        );
       }
     }
   } catch (error) {
@@ -109,52 +129,45 @@ export const agendarNotificacoesParaMedicamento = async (med: Medicamento) => {
   }
 };
 
-/**
- * 📌 Agenda todos os alarmes de uma lista de medicamentos
- */
 export const agendarTodosAlarmes = async (medicamentos: Medicamento[]) => {
   for (const med of medicamentos) {
     await agendarNotificacoesParaMedicamento(med);
   }
 };
 
-/**
- * 📏 Conversor de tipo para unidade
- */
 export const getUnidadePorTipo = (tipo: string): string => {
   const unidadesPorTipo: Record<string, string> = {
-    comprimido: 'un',
-    cápsula: 'un',
-    líquido: 'ml',
-    pomada: 'g',
-    injeção: 'ml',
-    spray: 'jato',
-    gotas: 'gotas',
-    supositório: 'un',
+    comprimido: 'un', cápsula: 'un', líquido: 'ml', pomada: 'g',
+    injeção: 'ml', spray: 'jato', gotas: 'gotas', supositório: 'un',
   };
   return unidadesPorTipo[tipo.toLowerCase()] || 'un';
 };
 
-/**
- * 📌 AsyncStorage para notificações lidas
- */
-export const getLidas = async (tipo: 'diretas' | 'avisos' | 'videos' | 'audios') => {
-  const lidas = await AsyncStorage.getItem(`notificacoesLidas_${tipo}`);
-  return lidas ? JSON.parse(lidas) : [];
+export const getLidas = async (tipo: 'diretas' | 'avisos' | 'videos' | 'audios' | 'saudeDiaria') => {
+  try {
+    const lidas = await AsyncStorage.getItem(`notificacoesLidas_${tipo}`);
+    return lidas ? JSON.parse(lidas) : [];
+  } catch {
+    // Variável 'error' removida pois não era usada
+    return [];
+  }
 };
 
-export const marcarComoLida = async (
-  tipo: 'diretas' | 'avisos' | 'videos' | 'audios',
-  ids: number[]
-) => {
-  await AsyncStorage.setItem(`notificacoesLidas_${tipo}`, JSON.stringify(ids));
+export const marcarComoLida = async (tipo: 'diretas' | 'avisos' | 'videos' | 'audios' | 'saudeDiaria', ids: number[]) => {
+  try {
+    await AsyncStorage.setItem(`notificacoesLidas_${tipo}`, JSON.stringify(ids));
+  } catch {
+    // Variável 'error' removida pois não era usada
+  }
 };
 
 /**
- * 🔔 Inicializa notificações do app
+ * 🔔 Inicializa notificações
  */
 export const inicializarNotificacoes = async (medicamentos: Medicamento[]) => {
-  configurarCanalNotificacao();
+  await configurarCanalNotificacao();
+  await configurarCanalNovidades();
+  
   if (medicamentos?.length > 0) {
     await agendarTodosAlarmes(medicamentos);
   }
