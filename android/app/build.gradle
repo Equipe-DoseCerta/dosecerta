@@ -68,6 +68,7 @@ android {
         versionCode versionProps.versionCode
         versionName versionProps.versionName
     }
+    
 
     signingConfigs {
         debug {

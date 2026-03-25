@@ -4,21 +4,22 @@ import {
   Text,
   StyleSheet,
   Animated,
-  StatusBar,
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
-
 import { useModal } from '../components/ModalContext';
 import UpdateService from '../services/UpdateService';
+// ✅ NOVAS IMPORTAÇÕES
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import BadgeService from '../services/badgeService';
 
 const SplashScreen = () => {
   const navigation = useNavigation();
   const { showModal } = useModal();
-
   const [isLoading, setIsLoading] = useState(true);
-
+  
+  // ✅ MANTIDO: Todas as animações originais
   const iconPulseAnim = useRef(new Animated.Value(1)).current;
   const backgroundPulseAnim = useRef(new Animated.Value(1)).current;
   const backgroundBounceAnim = useRef(new Animated.Value(0)).current;
@@ -27,7 +28,7 @@ const SplashScreen = () => {
     let isMounted = true;
 
     // ===============================
-    // ANIMAÇÕES
+    // ANIMAÇÕES (CÓDIGO ORIGINAL PRESERVADO)
     // ===============================
     Animated.loop(
       Animated.sequence([
@@ -75,13 +76,17 @@ const SplashScreen = () => {
     ).start();
 
     // ===============================
-    // INIT
+    // INIT (MODIFICADO COM SEGURANÇA)
     // ===============================
     const init = async () => {
       try {
+        // ✅ NOVO: Inicializa badges (verifica primeira abertura do app)
+        await BadgeService.initializeBadges();
+        
+        // ✅ ORIGINAL: Verifica updates
         await UpdateService.run(showModal);
       } catch (e) {
-        console.log('[Splash] erro no update:', e);
+        console.log('[Splash] erro no init:', e);
       }
 
       // garante tempo mínimo do splash
@@ -90,12 +95,18 @@ const SplashScreen = () => {
 
         setIsLoading(false);
 
-        navigation.dispatch(
-          CommonActions.reset({
-            index: 0,
-            routes: [{ name: 'Welcome' as never }],
-          })
-        );
+        // ✅ NOVO: Verifica se já completou onboarding para decidir destino
+        AsyncStorage.getItem('@DoseCerta:onboarding_complete').then((value) => {
+          const shouldShowWelcome = value === null;
+          const nextScreen = shouldShowWelcome ? 'Welcome' : 'Home';
+
+          navigation.dispatch(
+            CommonActions.reset({
+              index: 0,
+              routes: [{ name: nextScreen as never }],
+            })
+          );
+        });
       }, 3500);
     };
 
@@ -111,8 +122,7 @@ const SplashScreen = () => {
       colors={['#054F77', '#0A7394', '#1583A8']}
       style={styles.container}
     >
-      <StatusBar barStyle="light-content" />
-
+      {/* ✅ MANTIDO: Todas as views animadas originais */}
       <Animated.View
         style={[
           styles.animatedCircle,
@@ -185,6 +195,7 @@ const SplashScreen = () => {
   );
 };
 
+// ✅ MANTIDO: Todos os estilos originais
 const styles = StyleSheet.create({
   container: {
     flex: 1,

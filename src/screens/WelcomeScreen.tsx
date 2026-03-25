@@ -10,29 +10,33 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CommonActions } from '@react-navigation/native';
-import { RootStackParamList } from '../navigation/AppNavigator'; // ajuste o caminho para seu arquivo de tipos
+import { RootStackParamList } from '../navigation/AppNavigator';
 import DeviceInfo from 'react-native-device-info';
+// ✅ NOVA IMPORTAÇÃO
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>;
 
-const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
+
+const WelcomeScreen: React.FC<NativeStackScreenProps<RootStackParamList, 'Welcome'>> = ({ 
+  navigation // ✅ Agora o TypeScript reconhece 'navigation'
+}) => {
   const [isLoading, setIsLoading] = useState(true);
-  const [appVersion, setAppVersion] = useState(''); // Estado para a versão
-
-  // Referências de animação
+  const [appVersion, setAppVersion] = useState('');
+  
+  // ✅ MANTIDO: Todas as referências de animação originais
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const iconPulseAnim = useRef(new Animated.Value(1)).current;
   const iconRotateAnim = useRef(new Animated.Value(0)).current;
   const buttonFadeAnim = useRef(new Animated.Value(0)).current;
   const buttonScaleAnim = useRef(new Animated.Value(0.8)).current;
-  
-  // Efeito para carregar a versão e iniciar as animações
+
+  // ✅ MANTIDO: Efeito completo original
   useEffect(() => {
     // 1. Carregar a versão do aplicativo
     const loadVersion = () => {
-        const version = DeviceInfo.getVersion();
-        setAppVersion(version);
+      const version = DeviceInfo.getVersion();
+      setAppVersion(version);
     };
     loadVersion();
 
@@ -99,13 +103,15 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
     }, 2000);
 
     return () => clearTimeout(loadingTimer);
-  }, [fadeAnim, scaleAnim, iconPulseAnim, iconRotateAnim, buttonFadeAnim, buttonScaleAnim]); // Dependências de animação
+  }, [fadeAnim, scaleAnim, iconPulseAnim, iconRotateAnim, buttonFadeAnim, buttonScaleAnim]);
 
+  // ✅ MANTIDO: Interpolação original
   const rotate = iconRotateAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
+  // ✅ MANTIDO: Objeto de cores original
   const colors = {
     primary: '#054f77',
     secondary: '#0a7ab8',
@@ -115,15 +121,26 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
     card: '#ffffff',
   };
 
-  /**
-   * FUNÇÃO CORRIGIDA: Usa CommonActions.reset para navegar para 'Home'.
-   * Isso remove 'Welcome' (e 'Splash') do histórico, impedindo o retorno.
-   */
-  const handleStart = () => {
+  // ✅ MODIFICADO: Agora salva as flags antes de navegar
+  const handleStart = async () => {
+    try {
+      // ✅ NOVO: Salva flag de onboarding completo
+      await AsyncStorage.setItem('@DoseCerta:onboarding_complete', 'true');
+      
+      // ✅ NOVO: Garante flag de primeira abertura
+      await AsyncStorage.setItem('@DoseCerta:first_open_done', 'true');
+      
+      console.log('✅ Flags salvas com sucesso');
+    } catch (error) {
+      console.error('Erro ao salvar preferências:', error);
+      // Mesmo com erro, prosseguimos para não travar o usuário
+    }
+
+    // ✅ MANTIDO: Navegação original com reset
     navigation.dispatch(
       CommonActions.reset({
         index: 0,
-        routes: [{ name: 'Home' }], // Define 'Home' como a única tela na pilha
+        routes: [{ name: 'Home' }],
       })
     );
   };
@@ -138,7 +155,6 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.icon}>👋</Text>
             </View>
           </Animated.View>
-
           <View style={styles.textSection}>
             <Text style={[styles.title, { color: colors.white }]}>Bem-vindo ao DoseCerta</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
@@ -164,7 +180,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
             </Animated.View>
           )}
         </View>
-        {/* RODAPÉ FUNCIONAL: appVersion está no estado e é carregado no useEffect */}
+        {/* ✅ MANTIDO: Rodapé funcional original */}
         <View style={styles.footer}>
           <Text style={styles.versionText}>Versão {appVersion}</Text>
           <Text style={styles.footerSmallText}>© DoseCerta {new Date().getFullYear()}</Text>
@@ -174,6 +190,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
+// ✅ MANTIDO: Todos os estilos originais
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   mainContainer: { paddingHorizontal: 20, paddingVertical: 40, alignItems: 'center' },
